@@ -23,6 +23,7 @@ import BacktestPanel from './components/BacktestPanel.vue'
 import TopicPanel from './components/TopicPanel.vue'
 import FactorPanel from './components/FactorPanel.vue'
 import PaperPanel from './components/PaperPanel.vue'
+import OpsPanel from './components/OpsPanel.vue'
 
 const meta = ref<Meta | null>(null)
 const watchlist = ref<WatchlistItem[]>([])
@@ -276,6 +277,8 @@ onMounted(async () => {
         </template>
 
         <PaperPanel @select="selectStock" />
+
+        <OpsPanel />
 
         <div class="footer">
           {{ meta?.disclaimer || '目标价与操作建议为模型推算，不保证准确；仅供个人研究使用。' }}

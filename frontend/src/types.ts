@@ -723,3 +723,134 @@ export interface FactorRunSummary {
 
 /** ``GET /factors/runs/{id}`` 与 ``POST /factors/run`` 返回同一结构。 */
 export type FactorRunDetail = FactorRunResult
+
+/* ---------- operations ---------- */
+
+export type OpsKind = '推演' | '主题' | '回测' | '成交'
+
+/** 账本里的一行：四类记录被归一成同一组展示字段。 */
+export interface OpsEntry {
+  kind: OpsKind
+  ref: string
+  id: number
+  title: string
+  symbol: string
+  as_of: string
+  /** 推演=风控裁定；主题=范围|裁定；回测=超额年化…；成交=买入/卖出。 */
+  stance: string
+  /** 推演=最终仓位%；主题=信心；回测=区间收益%；成交=金额。 */
+  score: number | null
+  review: string
+  review_detail: string
+  tokens: number
+  status: string
+  created_at: string
+}
+
+export interface OpsLedger {
+  count: number
+  entries: OpsEntry[]
+}
+
+export interface OpsCounts {
+  runs: number
+  topics: number
+  backtests: number
+  trades: number
+}
+
+/** ``GET /ledger/review`` 与 ``summary.reviews`` 的结构。 */
+export interface OpsReviews {
+  runs: number
+  reviews: number
+  covered_pct: number
+  runs_without_review: number
+  pending: number
+  judged: number
+  correct: number
+  wrong: number
+  /** 没有已判定样本时为 null。 */
+  hit_rate_pct: number | null
+  last_refreshed_at: string | null
+}
+
+export interface OpsTokenTotals {
+  agent: number
+  topic: number
+  total: number
+}
+
+export interface OpsSummary {
+  counts: OpsCounts
+  reviews: OpsReviews
+  tokens: OpsTokenTotals
+}
+
+/** ``POST /ledger/review/refresh``：复盘状态加上本次写入统计。 */
+export interface OpsReviewRefresh extends OpsReviews {
+  refreshed: { runs: number; written: number; skipped: number }
+}
+
+export interface OpsUsagePoint {
+  date: string
+  runs: number
+  topics: number
+  backtests: number
+  factors: number
+  tokens: number
+  calls: number
+  seconds: number
+}
+
+/** ``GET /usage?days=``：series 按日期倒序。 */
+export interface OpsUsage {
+  days: number
+  total_tokens: number
+  total_tasks: number
+  series: OpsUsagePoint[]
+}
+
+export type OpsTableStatus = 'ok' | 'stale' | 'empty' | 'missing'
+
+export interface OpsHealthTable {
+  table: string
+  label: string
+  last_date: string | null
+  rows: number
+  lag_days: number | null
+  status: OpsTableStatus
+  expected_lag: number
+}
+
+export interface OpsPartialDay {
+  table: string
+  date: string
+  rows: number
+  expected: number
+}
+
+export interface OpsSyncLog {
+  job: string
+  status: string
+  rows: number
+  started_at: string
+}
+
+export interface OpsFingerprint {
+  first_date: string | null
+  as_of: string | null
+  bars: number
+  digest: string
+  built_at: string
+}
+
+export interface OpsHealth {
+  as_of: string
+  checked_at: string
+  ok: boolean
+  tables: OpsHealthTable[]
+  partial_days: OpsPartialDay[]
+  recent_sync: OpsSyncLog[]
+  issues: string[]
+  fingerprint: OpsFingerprint
+}

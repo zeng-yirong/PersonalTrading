@@ -12,6 +12,14 @@ import type {
   FactorRunSummary,
   Fundamentals,
   Meta,
+  OpsFingerprint,
+  OpsHealth,
+  OpsKind,
+  OpsLedger,
+  OpsReviewRefresh,
+  OpsReviews,
+  OpsSummary,
+  OpsUsage,
   Quote,
   ResearchNote,
   ResearchResponse,
@@ -150,4 +158,19 @@ export const api = {
   paperReviewStats: () => request<any>('/paper/review/stats'),
   paperRefreshReviews: () =>
     request<any>('/paper/review/refresh', { method: 'POST', body: '{}' }),
+
+  opsLedger: (limit = 20, kind: OpsKind | '' = '') =>
+    request<OpsLedger>(
+      `/ledger?limit=${limit}${kind ? `&kind=${encodeURIComponent(kind)}` : ''}`,
+    ),
+  opsSummary: () => request<OpsSummary>('/ledger/summary'),
+  opsReview: () => request<OpsReviews>('/ledger/review'),
+  opsReviewRefresh: (limit = 200) =>
+    request<OpsReviewRefresh>(`/ledger/review/refresh?limit=${limit}`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  opsUsage: (days = 14) => request<OpsUsage>(`/usage?days=${days}`),
+  opsHealth: () => request<OpsHealth>('/data/health'),
+  opsFingerprint: () => request<OpsFingerprint>('/data/fingerprint'),
 }
