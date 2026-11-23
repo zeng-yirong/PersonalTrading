@@ -158,13 +158,12 @@ def _trade_entries(conn, limit: int) -> list[dict[str, Any]]:
 
 
 def summary() -> dict[str, Any]:
+    from app.ops import review as review_job
+
     with connection() as conn:
         counts = {}
         for table in ("agent_runs", "topic_reports", "backtest_runs", "paper_trades"):
             counts[table] = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-        reviewed = conn.execute(
-            "SELECT outcome, COUNT(*) FROM agent_reviews GROUP BY 1"
-        ).fetchall()
         tokens = conn.execute(
             "SELECT COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0) "
             "FROM agent_runs"
@@ -174,9 +173,6 @@ def summary() -> dict[str, Any]:
             "FROM topic_reports"
         ).fetchone()
 
-    outcomes = {row[0]: int(row[1]) for row in reviewed}
-    correct = sum(value for key, value in outcomes.items() if str(key).endswith("正确"))
-    wrong = sum(value for key, value in outcomes.items() if str(key).endswith("错误"))
     return {
         "counts": {
             "runs": int(counts["agent_runs"]),
@@ -184,16 +180,7 @@ def summary() -> dict[str, Any]:
             "backtests": int(counts["backtest_runs"]),
             "trades": int(counts["paper_trades"]),
         },
-        "reviews": {
-            "reviewed": sum(outcomes.values()),
-            "correct": correct,
-            "wrong": wrong,
-            "pending": sum(
-                value for key, value in outcomes.items()
-                if "待验证" in str(key) or "待" in str(key)
-            ),
-            "hit_rate_pct": round(correct / (correct + wrong) * 100, 1) if correct + wrong else None,
-        },
+        "reviews": review_job.status(),
         "tokens": {
             "agent": int(tokens[0]) + int(tokens[1]),
             "topic": int(topic_tokens[0]) + int(topic_tokens[1]),

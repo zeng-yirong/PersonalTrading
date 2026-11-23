@@ -9,10 +9,21 @@ from starlette.concurrency import run_in_threadpool
 
 from app.data import fingerprint
 from app.ops import health, ledger
+from app.ops import review as review_job
 
 router = APIRouter(prefix="/api", tags=["ops"])
 
 KINDS = ("推演", "主题", "回测", "成交")
+
+
+@router.get("/ledger/review")
+async def review_status() -> dict[str, Any]:
+    return await run_in_threadpool(review_job.status)
+
+
+@router.post("/ledger/review/refresh")
+async def review_refresh(limit: int = Query(200, ge=1, le=500)) -> dict[str, Any]:
+    return await run_in_threadpool(review_job.run, limit)
 
 
 @router.get("/ledger")

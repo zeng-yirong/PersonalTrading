@@ -72,13 +72,47 @@ def cmd_summary(args: argparse.Namespace) -> int:
     reviews = summary["reviews"]
     tokens = summary["tokens"]
     print("记录：", "｜".join(f"{key} {value}" for key, value in counts.items()))
+    print(
+        f"复盘：{reviews['runs']} 次推演 → {reviews['reviews']} 条已建"
+        f"（覆盖 {reviews['covered_pct']}%，缺 {reviews['runs_without_review']} 条）"
+    )
     rate = reviews["hit_rate_pct"]
     print(
-        f"复盘：{reviews['reviewed']} 条，正确 {reviews['correct']} / 错误 {reviews['wrong']}"
-        f" / 待验证 {reviews['pending']}"
+        f"判定：待验证 {reviews['pending']} / 已判定 {reviews['judged']}"
+        f" / 正确 {reviews['correct']} / 错误 {reviews['wrong']}"
         + (f"，命中率 {rate}%" if rate is not None else "")
     )
+    print(f"最近刷新：{reviews['last_refreshed_at'] or '尚未刷新'}")
     print(f"tokens：推演 {tokens['agent']:,}，主题 {tokens['topic']:,}，合计 {tokens['total']:,}")
+    return 0
+
+
+def cmd_review(args: argparse.Namespace) -> int:
+    from app.ops import review as review_job
+
+    if args.refresh:
+        result = review_job.run(args.limit)
+        refreshed = result.pop("refreshed")
+        print(
+            f"刷新完成：扫描 {refreshed['runs']} 次推演，写入 {refreshed['written']} 条，"
+            f"跳过 {refreshed['skipped']} 条（缺 as_of 或价格）"
+        )
+    else:
+        result = review_job.status()
+
+    print(
+        f"复盘：{result['runs']} 次推演 → {result['reviews']} 条已建"
+        f"（覆盖 {result['covered_pct']}%）"
+    )
+    rate = result["hit_rate_pct"]
+    print(
+        f"判定：待验证 {result['pending']} / 已判定 {result['judged']}"
+        f" / 正确 {result['correct']} / 错误 {result['wrong']}"
+        + (f"，命中率 {rate}%" if rate is not None else "")
+    )
+    print(f"最近刷新：{result['last_refreshed_at'] or '尚未刷新'}")
+    if result["pending"]:
+        print("提示：待验证的推演要等 T+20 走完才会判定，属正常状态。")
     return 0
 
 
@@ -141,6 +175,11 @@ def main() -> int:
 
     p_summary = sub.add_parser("summary", help="账本汇总与 token 总量")
     p_summary.set_defaults(func=cmd_summary)
+
+    p_review = sub.add_parser("review", help="复盘状态；--refresh 重新计算 T+5/T+20")
+    p_review.add_argument("--refresh", action="store_true", help="先重算再汇报")
+    p_review.add_argument("--limit", type=int, default=200, help="最多扫描多少次推演")
+    p_review.set_defaults(func=cmd_review)
 
     p_usage = sub.add_parser("usage", help="按日 token 与任务量")
     p_usage.add_argument("--days", type=int, default=30)

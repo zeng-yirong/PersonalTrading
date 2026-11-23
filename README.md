@@ -886,6 +886,19 @@ python scripts/ops.py summary                  # 计数 + 复盘命中率 + toke
 
 账本把四类记录归一成一行：`类型 / 时间 / 标题 / 数据日 / 结论 / 仓位或分数 / 复盘 / tokens`。推演会带上 `agent_reviews` 的 T+20 判定（正确 / 错误 / 待验证），这是"这条建议后来怎样"的第一个版本。对应 `GET /api/ledger`、`/api/ledger/summary`。
 
+### 复盘刷新
+
+```bash
+python scripts/ops.py review            # 只看状态：覆盖、待验证、命中率、最近刷新时间
+python scripts/ops.py review --refresh  # 先重算 T+5/T+20，再汇报
+```
+
+`--refresh` 会扫描最近 200 次推演，按各自的 as-of 日冻结入场价，算 T+5 / T+20 收益与相对沪深300 超额，写入 `agent_reviews`。判定标准不是"涨了就算对"，而是**看当时的立场**：看多需上涨、否决/空仓需下跌，|收益| < 1% 算中性区间。
+
+工作日 **19:30**（日更之后）有定时任务自动跑一次；没有新判定时只回一行。对应 `GET /api/ledger/review` 与 `POST /api/ledger/review/refresh`。
+
+`ops.py summary` 现在会一并显示：推演总数、已建复盘数、覆盖率、待验证数、命中率、最近刷新时间。
+
 ### 成本台账
 
 ```bash

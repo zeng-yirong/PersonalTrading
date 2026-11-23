@@ -11,6 +11,7 @@ from app.config import settings
 from app.data import fingerprint, store
 from app.db import connection, init_db
 from app.ops import health, ledger
+from app.ops import review as review_job
 
 
 @pytest.fixture()
@@ -84,8 +85,8 @@ def _seed_records() -> None:
              json.dumps({"decision": "批准", "final_position_pct": 20}, ensure_ascii=False)),
         )
         conn.execute(
-            "INSERT INTO agent_reviews(run_id, symbol, name, outcome, d20_excess, updated_at) "
-            "VALUES(1, '600519', '贵州茅台', '看多/正确', 3.2, ?)",
+            "INSERT INTO agent_reviews(run_id, symbol, name, outcome, d20_return, d20_excess, "
+            "updated_at) VALUES(1, '600519', '贵州茅台', '看多/正确', 5.0, 3.2, ?)",
             ("2026-11-23T10:00:00+08:00",),
         )
         conn.execute(
@@ -142,7 +143,44 @@ def test_ledger_summary_and_usage(panel):
     assert usage["series"][0]["date"] == "2026-11-23"
 
 
-def test_ops_http_contract(panel):
+def test_review_job_writes_and_counts_pending(panel):
+    with connection() as conn:
+        conn.execute(
+            "INSERT INTO agent_runs(id, symbol, name, status, model, rounds, started_at, "
+            "context_json, verdict) VALUES(2, '600519', '贵州茅台', 'ok', 'm', 1, ?, ?, ?)",
+            (
+                "2026-01-02T10:00:00+08:00",
+                json.dumps({"as_of": "2026-01-02"}),
+                json.dumps({"decision": "批准", "final_position_pct": 20}),
+            ),
+        )
+    result = review_job.run()
+    assert result["refreshed"]["written"] == 1
+    assert result["reviews"] == 1
+    assert result["pending"] == 1          # 面板只有 10 个交易日，T+20 还没到
+    assert result["judged"] == 0
+    assert result["hit_rate_pct"] is None
+    assert result["last_refreshed_at"]
+    # 幂等：再跑一次不会多出记录
+    again = review_job.run()
+    assert again["reviews"] == 1
+
+
+def test_review_http_endpoints(panel):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    _seed_records()
+    client = TestClient(app)
+    status = client.get("/api/ledger/review").json()
+    assert status["reviews"] == 1
+    assert status["judged"] == 1
+    refreshed = client.post("/api/ledger/review/refresh").json()
+    assert "refreshed" in refreshed
+
+
+def test_http_contract(panel):
     from fastapi.testclient import TestClient
 
     from app.main import app
