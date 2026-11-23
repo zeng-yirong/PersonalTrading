@@ -1,0 +1,153 @@
+import type {
+  AgentRunSummary,
+  BacktestMeta,
+  BacktestRequest,
+  BacktestResult,
+  BacktestRunSummary,
+  ChartData,
+  FactorMeta,
+  FactorRequest,
+  FactorRunDetail,
+  FactorRunResult,
+  FactorRunSummary,
+  Fundamentals,
+  Meta,
+  Quote,
+  ResearchNote,
+  ResearchResponse,
+  ScreenField,
+  ScreenQueryPayload,
+  ScreenResult,
+  SearchResult,
+  TopicContext,
+  TopicMeta,
+  TopicReport,
+  TopicReportDetail,
+  TopicReportSummary,
+  WatchlistItem,
+} from './types'
+
+const BASE = '/api'
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    ...init,
+  })
+  if (!response.ok) {
+    let detail = `请求失败 (${response.status})`
+    try {
+      const body = await response.json()
+      if (body?.detail) detail = String(body.detail)
+    } catch {
+      /* ignore non-JSON errors */
+    }
+    throw new Error(detail)
+  }
+  return response.json() as Promise<T>
+}
+
+export const api = {
+  meta: () => request<Meta>('/meta'),
+
+  watchlist: () => request<WatchlistItem[]>('/watchlist'),
+  addWatchlist: (symbol: string, name?: string) =>
+    request<WatchlistItem>('/watchlist', {
+      method: 'POST',
+      body: JSON.stringify({ symbol, name }),
+    }),
+  removeWatchlist: (symbol: string) =>
+    request<{ ok: boolean; symbol: string }>(`/watchlist/${symbol}`, { method: 'DELETE' }),
+
+  search: (query: string) =>
+    request<SearchResult[]>(`/search?q=${encodeURIComponent(query)}`),
+
+  quote: (symbol: string) => request<Quote>(`/stocks/${symbol}/quote`),
+  chart: (symbol: string, period: string, limit = 250) =>
+    request<ChartData>(`/stocks/${symbol}/chart?period=${period}&limit=${limit}`),
+  fundamentals: (symbol: string) => request<Fundamentals>(`/stocks/${symbol}/fundamentals`),
+
+  research: (symbol: string) =>
+    request<ResearchResponse>(`/stocks/${symbol}/research`, { method: 'POST', body: '{}' }),
+  notes: (symbol: string) => request<ResearchNote[]>(`/research-notes?symbol=${symbol}`),
+
+  agentStatus: () =>
+    request<{
+      llm_available: boolean
+      reason: string
+      model: string
+      debate_rounds: number
+      panel_ready: boolean
+    }>('/agents/status'),
+  agentRuns: (symbol: string) =>
+    request<{ count: number; runs: AgentRunSummary[] }>(
+      `/agents/runs?symbol=${encodeURIComponent(symbol)}&limit=10`,
+    ),
+  agentRun: (id: number) => request<AgentRunSummary>(`/agents/runs/${id}`),
+  agentStreamUrl: (symbol: string, rounds: number) =>
+    `${BASE}/agents/analyze/${encodeURIComponent(symbol)}?rounds=${rounds}`,
+
+  screenerFields: () =>
+    request<{ count: number; fields: ScreenField[] }>('/screener/fields'),
+  screenerMeta: () =>
+    request<{ as_of: string; symbols: number; cached: boolean }>('/screener/meta'),
+  screenerAsk: (text: string, limit = 30) =>
+    request<ScreenResult>('/screener/ask', {
+      method: 'POST',
+      body: JSON.stringify({ text, limit }),
+    }),
+  screenerRun: (query: ScreenQueryPayload) =>
+    request<ScreenResult>('/screener/run', {
+      method: 'POST',
+      body: JSON.stringify(query),
+    }),
+
+  backtestMeta: () => request<BacktestMeta>('/backtest/meta'),
+  backtestRun: (payload: BacktestRequest) =>
+    request<BacktestResult>('/backtest/run', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  backtestRuns: (limit = 20) =>
+    request<{ count: number; runs: BacktestRunSummary[] }>(`/backtest/runs?limit=${limit}`),
+  backtestRunDetail: (id: number) => request<BacktestResult>(`/backtest/runs/${id}`),
+
+  factorLibrary: () => request<FactorMeta>('/factors/library'),
+  factorRun: (payload: FactorRequest) =>
+    request<FactorRunResult>('/factors/run', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  factorRuns: (limit = 20) =>
+    request<{ count: number; runs: FactorRunSummary[] }>(`/factors/runs?limit=${limit}`),
+  factorRunDetail: (id: number) => request<FactorRunDetail>(`/factors/runs/${id}`),
+
+  topicMeta: () => request<TopicMeta>('/topics/meta'),
+  topicContext: (topic: string) =>
+    request<TopicContext>(`/topics/context?topic=${encodeURIComponent(topic)}`),
+  topicResearch: (topic: string) =>
+    request<TopicReport>('/topics/research', {
+      method: 'POST',
+      body: JSON.stringify({ topic }),
+    }),
+  topicReports: (limit = 20) =>
+    request<{ count: number; reports: TopicReportSummary[] }>(
+      `/topics/reports?limit=${limit}`,
+    ),
+  topicReport: (id: number) => request<TopicReportDetail>(`/topics/reports/${id}`),
+
+  paperSummary: () => request<any>('/paper/summary'),
+  paperPositions: () => request<{ count: number; positions: any[] }>('/paper/positions'),
+  paperNav: () => request<{ count: number; series: any[] }>('/paper/nav'),
+  paperTrades: (limit = 50) => request<{ count: number; trades: any[] }>(`/paper/trades?limit=${limit}`),
+  paperFromRun: (runId: number, fraction = 1) =>
+    request<any>(`/paper/from-run/${runId}`, {
+      method: 'POST',
+      body: JSON.stringify({ fraction }),
+    }),
+  paperReviews: (limit = 20) =>
+    request<{ count: number; reviews: any[] }>(`/paper/reviews?limit=${limit}`),
+  paperReviewStats: () => request<any>('/paper/review/stats'),
+  paperRefreshReviews: () =>
+    request<any>('/paper/review/refresh', { method: 'POST', body: '{}' }),
+}
