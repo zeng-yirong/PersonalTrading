@@ -87,6 +87,45 @@ def cmd_summary(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_chain(args: argparse.Namespace) -> int:
+    payload = ledger.chain(args.run_id)
+    if payload is None:
+        print(f"推演 #{args.run_id} 不存在", file=sys.stderr)
+        return 1
+    run = payload["run"]
+    print(
+        f"推演 #{run['id']} {run['name']}（{run['symbol']}）"
+        f"｜{run['status']}｜{run['started_at']}"
+    )
+    print(
+        f"裁定：{run['decision']}｜仓位 {run['final_position_pct']}%"
+        f"｜tokens {run['tokens']:,}"
+    )
+    review = payload["review"]
+    if review:
+        print(
+            f"复盘：{review['outcome']}｜入场 {review['entry_price']}"
+            f"｜T+20 {review.get('d20_return') if review.get('d20_return') is not None else '待验证'}"
+        )
+    else:
+        print("复盘：尚未建立")
+    for item in payload["backtests"]:
+        print(
+            f"回测 #{item['id']} {item['title']}｜收益 {item['total_return_pct']:+.2f}%"
+            f"｜超额年化 {item['excess_cagr_pct']:+.2f}%｜{item['periods']} 期"
+        )
+    for item in payload["topics"]:
+        print(f"主题 #{item['id']} {item['topic']}｜{item['verdict']}｜信心 {item['confidence']}")
+    for item in payload["trades"]:
+        print(
+            f"成交 #{item['id']} {item['side']} {item['shares']:.0f} 股"
+            f" @ {item['price']:.2f}（{item['trade_date']}）"
+        )
+    if not any(payload[key] for key in ("backtests", "topics", "trades")):
+        print("这条推演还没有派生动作（回测 / 主题 / 成交）。")
+    return 0
+
+
 def cmd_review(args: argparse.Namespace) -> int:
     from app.ops import review as review_job
 
@@ -180,6 +219,10 @@ def main() -> int:
     p_review.add_argument("--refresh", action="store_true", help="先重算再汇报")
     p_review.add_argument("--limit", type=int, default=200, help="最多扫描多少次推演")
     p_review.set_defaults(func=cmd_review)
+
+    p_chain = sub.add_parser("chain", help="一条推演派生出的回测/主题/成交")
+    p_chain.add_argument("run_id", type=int, help="推演编号")
+    p_chain.set_defaults(func=cmd_chain)
 
     p_usage = sub.add_parser("usage", help="按日 token 与任务量")
     p_usage.add_argument("--days", type=int, default=30)

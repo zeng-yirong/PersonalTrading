@@ -65,6 +65,7 @@ def _agent_entries(conn, limit: int) -> list[dict[str, Any]]:
                 "score": position,
                 "review": review,
                 "review_detail": detail,
+                "source_run_id": row["id"],
                 "tokens": int(row["prompt_tokens"] or 0) + int(row["completion_tokens"] or 0),
                 "status": row["status"],
                 "created_at": str(row["started_at"]),
@@ -76,7 +77,8 @@ def _agent_entries(conn, limit: int) -> list[dict[str, Any]]:
 def _topic_entries(conn, limit: int) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT id, topic, title, scope, verdict, confidence, as_of, created_at, "
-        "prompt_tokens, completion_tokens FROM topic_reports ORDER BY id DESC LIMIT ?",
+        "prompt_tokens, completion_tokens, source_run_id "
+        "FROM topic_reports ORDER BY id DESC LIMIT ?",
         (limit,),
     ).fetchall()
     return [
@@ -91,6 +93,7 @@ def _topic_entries(conn, limit: int) -> list[dict[str, Any]]:
             "score": row["confidence"],
             "review": "—",
             "review_detail": "",
+            "source_run_id": row["source_run_id"],
             "tokens": int(row["prompt_tokens"] or 0) + int(row["completion_tokens"] or 0),
             "status": "ok",
             "created_at": str(row["created_at"]),
@@ -101,8 +104,8 @@ def _topic_entries(conn, limit: int) -> list[dict[str, Any]]:
 
 def _backtest_entries(conn, limit: int) -> list[dict[str, Any]]:
     rows = conn.execute(
-        "SELECT id, title, spec_json, metrics_json, created_at FROM backtest_runs "
-        "ORDER BY id DESC LIMIT ?",
+        "SELECT id, title, spec_json, metrics_json, source_run_id, created_at "
+        "FROM backtest_runs ORDER BY id DESC LIMIT ?",
         (limit,),
     ).fetchall()
     output = []
@@ -121,6 +124,7 @@ def _backtest_entries(conn, limit: int) -> list[dict[str, Any]]:
                 "score": metrics.get("total_return_pct"),
                 "review": f"回撤 {metrics.get('max_drawdown_pct', 0):.2f}%",
                 "review_detail": f"{metrics.get('periods', 0)} 期",
+                "source_run_id": row["source_run_id"],
                 "tokens": 0,
                 "status": "ok",
                 "created_at": str(row["created_at"]),
@@ -149,12 +153,85 @@ def _trade_entries(conn, limit: int) -> list[dict[str, Any]]:
             "score": row["amount"],
             "review": f"来自推演 #{row['run_id']}" if row["run_id"] else "手工",
             "review_detail": f"{row['shares']:.0f} 股 @ {row['price']:.2f}",
+            "source_run_id": row["run_id"],
             "tokens": 0,
             "status": "ok",
             "created_at": str(row["created_at"]),
         }
         for row in rows
     ]
+
+
+def chain(run_id: int) -> Optional[dict[str, Any]]:
+    """Everything that descends from one research run, in one object.
+
+    The ledger rows each know their own source; this is the view that answers
+    "what did we do because of run #7, and how did it end".
+    """
+    with connection() as conn:
+        run = conn.execute(
+            "SELECT id, symbol, name, status, model, started_at, finished_at, verdict, "
+            "prompt_tokens, completion_tokens FROM agent_runs WHERE id = ?",
+            (run_id,),
+        ).fetchone()
+        if run is None:
+            return None
+        review = conn.execute(
+            "SELECT * FROM agent_reviews WHERE run_id = ?", (run_id,)
+        ).fetchone()
+        backtests = conn.execute(
+            "SELECT id, title, metrics_json, created_at FROM backtest_runs "
+            "WHERE source_run_id = ? ORDER BY id DESC",
+            (run_id,),
+        ).fetchall()
+        topics = conn.execute(
+            "SELECT id, topic, verdict, confidence, created_at FROM topic_reports "
+            "WHERE source_run_id = ? ORDER BY id DESC",
+            (run_id,),
+        ).fetchall()
+        trades = conn.execute(
+            "SELECT id, symbol, side, shares, price, fee, amount, trade_date "
+            "FROM paper_trades WHERE run_id = ? ORDER BY id",
+            (run_id,),
+        ).fetchall()
+
+    verdict = _json(run["verdict"])
+    return {
+        "run": {
+            "id": run["id"],
+            "symbol": run["symbol"],
+            "name": run["name"],
+            "status": run["status"],
+            "model": run["model"],
+            "started_at": run["started_at"],
+            "finished_at": run["finished_at"],
+            "decision": verdict.get("decision"),
+            "final_position_pct": verdict.get("final_position_pct"),
+            "tokens": int(run["prompt_tokens"] or 0) + int(run["completion_tokens"] or 0),
+        },
+        "review": dict(review) if review else None,
+        "backtests": [
+            {
+                "id": row["id"],
+                "title": row["title"],
+                **_metrics_brief(row["metrics_json"]),
+                "created_at": row["created_at"],
+            }
+            for row in backtests
+        ],
+        "topics": [dict(row) for row in topics],
+        "trades": [dict(row) for row in trades],
+    }
+
+
+def _metrics_brief(raw: Optional[str]) -> dict[str, Any]:
+    metrics = _json(raw)
+    return {
+        "total_return_pct": metrics.get("total_return_pct"),
+        "excess_cagr_pct": metrics.get("excess_cagr_pct"),
+        "max_drawdown_pct": metrics.get("max_drawdown_pct"),
+        "periods": metrics.get("periods"),
+    }
 
 
 def summary() -> dict[str, Any]:

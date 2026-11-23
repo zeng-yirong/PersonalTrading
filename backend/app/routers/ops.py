@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
 
 from app.data import fingerprint
@@ -14,6 +14,14 @@ from app.ops import review as review_job
 router = APIRouter(prefix="/api", tags=["ops"])
 
 KINDS = ("推演", "主题", "回测", "成交")
+
+
+@router.get("/ledger/chain/{run_id}")
+async def ledger_chain(run_id: int) -> dict[str, Any]:
+    payload = await run_in_threadpool(ledger.chain, run_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"推演 #{run_id} 不存在")
+    return payload
 
 
 @router.get("/ledger/review")

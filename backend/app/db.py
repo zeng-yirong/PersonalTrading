@@ -185,6 +185,7 @@ CREATE TABLE IF NOT EXISTS backtest_runs (
     periods_json TEXT NOT NULL,
     trades_json TEXT,
     warnings_json TEXT,
+    source_run_id INTEGER,
     created_at TEXT NOT NULL
 );
 
@@ -205,6 +206,7 @@ CREATE TABLE IF NOT EXISTS topic_reports (
     markdown TEXT,
     prompt_tokens INTEGER DEFAULT 0,
     completion_tokens INTEGER DEFAULT 0,
+    source_run_id INTEGER,
     created_at TEXT NOT NULL
 );
 
@@ -243,6 +245,25 @@ def connection():
 def init_db() -> None:
     with connection() as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
+
+
+def _migrate(conn) -> None:
+    """Add columns that older databases predate.
+
+    ``CREATE TABLE IF NOT EXISTS`` never alters an existing table, so every
+    column introduced after a workspace was first created needs an explicit
+    ``ALTER TABLE`` here. Each one is guarded by ``PRAGMA table_info`` so the
+    migration is idempotent.
+    """
+    migrations = (
+        ("backtest_runs", "source_run_id", "INTEGER"),
+        ("topic_reports", "source_run_id", "INTEGER"),
+    )
+    for table, column, kind in migrations:
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
 
 
 def now_iso() -> str:

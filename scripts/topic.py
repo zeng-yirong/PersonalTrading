@@ -93,7 +93,9 @@ async def main_async(args: argparse.Namespace) -> int:
 
     print(f"正在研究「{topic}」：读取面板快照 → 生成报告（约 30-90 秒）…", file=sys.stderr)
     try:
-        report = await service.research(topic, model=args.model or "")
+        report = await service.research(
+        topic, model=args.model or "", source_run_id=args.source_run
+    )
     except (TopicError, LLMError) as exc:
         print(f"[失败] {exc}", file=sys.stderr)
         return 1
@@ -124,6 +126,7 @@ def main() -> int:
     parser.add_argument("--json-out", help="把快照或报告 JSON 写到文件")
     parser.add_argument("--context", action="store_true", help="只看数据快照，不调用模型")
     parser.add_argument("--model", help="覆盖默认模型")
+    parser.add_argument("--source-run", type=int, help="关联的推演编号")
     parser.add_argument("--list", action="store_true", help="列出历史报告")
     parser.add_argument("--limit-history", type=int, default=20)
     args = parser.parse_args()

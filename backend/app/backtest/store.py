@@ -19,8 +19,8 @@ def save(result: dict[str, Any]) -> int:
     with connection() as conn:
         cursor = conn.execute(
             "INSERT INTO backtest_runs(title, spec_json, metrics_json, nav_json, "
-            "periods_json, trades_json, warnings_json, created_at) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+            "periods_json, trades_json, warnings_json, source_run_id, created_at) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 result.get("title") or "",
                 json.dumps(result["spec"], ensure_ascii=False),
@@ -29,6 +29,7 @@ def save(result: dict[str, Any]) -> int:
                 json.dumps(result["periods"], ensure_ascii=False),
                 json.dumps(result.get("trades") or [], ensure_ascii=False),
                 json.dumps(result.get("warnings") or [], ensure_ascii=False),
+                result.get("source_run_id"),
                 now_iso(),
             ),
         )
@@ -44,7 +45,7 @@ def save(result: dict[str, Any]) -> int:
 def list_runs(limit: int = 20) -> list[dict[str, Any]]:
     with connection() as conn:
         rows = conn.execute(
-            "SELECT id, title, spec_json, metrics_json, created_at "
+            "SELECT id, title, spec_json, metrics_json, source_run_id, created_at "
             "FROM backtest_runs ORDER BY id DESC LIMIT ?",
             (limit,),
         ).fetchall()
@@ -57,6 +58,7 @@ def list_runs(limit: int = 20) -> list[dict[str, Any]]:
                 "id": row["id"],
                 "title": row["title"],
                 "created_at": row["created_at"],
+                "source_run_id": row["source_run_id"],
                 "spec": {
                     "start": spec.get("start"),
                     "end": spec.get("end"),

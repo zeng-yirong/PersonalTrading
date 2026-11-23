@@ -27,12 +27,19 @@ def _client(model: str = "") -> ChatClient:
     return ChatClient(model=model)
 
 
-async def research(topic: str, model: str = "") -> dict[str, Any]:
+async def research(
+    topic: str, model: str = "", source_run_id: Optional[int] = None
+) -> dict[str, Any]:
     text = (topic or "").strip()
     if len(text) < MIN_TOPIC_CHARS:
         raise TopicError("主题太短，至少写 2 个字")
     if len(text) > MAX_TOPIC_CHARS:
         raise TopicError(f"主题太长，控制在 {MAX_TOPIC_CHARS} 字以内")
+    if source_run_id is not None:
+        from app.agents import store as agent_store
+
+        if agent_store.get_run(int(source_run_id)) is None:
+            raise TopicError(f"推演 #{source_run_id} 不存在")
 
     client = _client(model)
     available, reason = client.available()
@@ -82,6 +89,7 @@ async def research(topic: str, model: str = "") -> dict[str, Any]:
         "context_summary": context.summary(snapshot),
         "data_gaps": snapshot.get("data_gaps") or [],
         "usage": usage,
+        "source_run_id": source_run_id,
     }
     record["prompt_tokens"] = usage["prompt_tokens"]
     record["completion_tokens"] = usage["completion_tokens"]

@@ -899,6 +899,20 @@ python scripts/ops.py review --refresh  # 先重算 T+5/T+20，再汇报
 
 `ops.py summary` 现在会一并显示：推演总数、已建复盘数、覆盖率、待验证数、命中率、最近刷新时间。
 
+### 一条决策的来龙去脉
+
+账本里的每条记录都能指出自己从哪来：回测和主题可以把 `source_run_id` 挂到一次推演上，成交本来就带 `run_id`。
+
+```bash
+python scripts/ops.py chain 10           # 推演 #10 及其派生的一切
+python scripts/backtest.py "ROE>15" --source-run 10
+python scripts/topic.py "白酒" --source-run 10
+```
+
+`chain` 输出：推演（裁定 / 仓位 / tokens）→ 复盘（T+20 判定）→ 回测（收益 / 超额 / 回撤）→ 主题 → 成交。API 对应 `GET /api/ledger/chain/{run_id}`；`POST /api/backtest/run` 与 `POST /api/topics/research` 接受可选的 `source_run_id`。
+
+数据库升级：`source_run_id` 是后加列，`init_db()` 会用 `PRAGMA table_info` 检查并 `ALTER TABLE` 补齐，老库不需要手工迁移，重复执行也不会出错。
+
 ### 成本台账
 
 ```bash

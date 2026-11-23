@@ -357,6 +357,31 @@ def test_run_persists_and_lists(panel):
     assert detail["periods"] == first["periods"]
 
 
+def test_run_links_back_to_a_research_run(panel):
+    from app.db import connection
+
+    with connection() as conn:
+        conn.execute(
+            "INSERT INTO agent_runs(id, symbol, name, status, model, rounds, started_at) "
+            "VALUES(7, '600519', '贵州茅台', 'ok', 'm', 1, '2026-01-02T10:00:00+08:00')"
+        )
+    payload = {
+        "query": {"filters": [{"field": "pe_ttm", "op": "<=", "value": 100}]},
+        "start": panel[0].isoformat(),
+        "end": panel[-1].isoformat(),
+        "rebalance": 10,
+        "top_n": 1,
+        "source_run_id": 7,
+    }
+    result = service.run(payload)
+    assert result["source_run_id"] == 7
+    assert service.history(1)[0]["source_run_id"] == 7
+
+    bad = dict(payload, source_run_id=999)
+    with pytest.raises(BacktestError):
+        service.run(bad, persist=False)
+
+
 def test_http_contract(panel):
     """The response shape the UI is coded against; a rename here breaks the panel."""
     from fastapi.testclient import TestClient

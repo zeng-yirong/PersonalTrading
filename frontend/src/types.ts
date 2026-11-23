@@ -742,6 +742,8 @@ export interface OpsEntry {
   score: number | null
   review: string
   review_detail: string
+  /** 这条记录派生自哪次推演（回测/主题/成交可能有，推演填自己的 id）。 */
+  source_run_id?: number | null
   tokens: number
   status: string
   created_at: string

@@ -162,6 +162,7 @@ async def main_async(args: argparse.Namespace) -> int:
         ("top_n", args.top),
         ("initial_cash", args.cash),
         ("slippage_bps", args.slippage),
+        ("source_run_id", args.source_run),
     ):
         if value is not None:
             payload[key] = value
@@ -197,6 +198,7 @@ def main() -> int:
     parser.add_argument("--detail", action="store_true", help="打印每期明细")
     parser.add_argument("--json-out", help="把完整结果写到文件")
     parser.add_argument("--no-persist", action="store_true", help="不写历史记录")
+    parser.add_argument("--source-run", type=int, help="关联的推演编号（写成推演的后续动作）")
     parser.add_argument("--list", action="store_true", help="列出历史回测")
     parser.add_argument("--limit-history", type=int, default=20)
     args = parser.parse_args()

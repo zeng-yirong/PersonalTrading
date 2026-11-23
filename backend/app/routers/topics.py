@@ -31,6 +31,7 @@ EXAMPLES = (
 class ResearchModel(BaseModel):
     topic: str
     model: str = ""
+    source_run_id: Optional[int] = None
 
 
 @router.get("/meta")
@@ -65,7 +66,9 @@ async def preview(topic: str = Query(..., min_length=2, max_length=80)) -> dict[
 @router.post("/research")
 async def research(payload: ResearchModel) -> dict[str, Any]:
     try:
-        return await service.research(payload.topic, model=payload.model)
+        return await service.research(
+            payload.topic, model=payload.model, source_run_id=payload.source_run_id
+        )
     except TopicError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LLMError as exc:

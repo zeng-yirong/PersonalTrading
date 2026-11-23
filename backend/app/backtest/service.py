@@ -61,10 +61,28 @@ def meta() -> dict[str, Any]:
 def run(payload: dict[str, Any], persist: bool = True) -> dict[str, Any]:
     first, last, _ = panel_bounds()
     spec, warnings = spec_module.from_dict(payload, first, last)
-    return execute(spec, warnings, persist=persist)
+    source_run_id = _source_run(payload.get("source_run_id"))
+    result = execute(spec, warnings, persist=persist, source_run_id=source_run_id)
+    return result
 
 
-def execute(spec, warnings: list[str], persist: bool = True) -> dict[str, Any]:
+def _source_run(raw: Any) -> Optional[int]:
+    """Optional link back to the research run this backtest came from."""
+    if raw in (None, ""):
+        return None
+    try:
+        run_id = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise BacktestError(f"source_run_id 必须是整数：{raw}") from exc
+    from app.agents import store as agent_store
+
+    if agent_store.get_run(run_id) is None:
+        raise BacktestError(f"推演 #{run_id} 不存在")
+    return run_id
+
+
+def execute(spec, warnings: list[str], persist: bool = True,
+            source_run_id: Optional[int] = None) -> dict[str, Any]:
     days = panel.get_trade_days(spec.start, spec.end)
     if len(days) < 20:
         raise BacktestError("区间内交易日太少，无法回测")
@@ -98,6 +116,7 @@ def execute(spec, warnings: list[str], persist: bool = True) -> dict[str, Any]:
         "periods": simulated["periods"],
         "trades": simulated["trades"],
         "warnings": warnings,
+        "source_run_id": source_run_id,
     }
     if persist:
         run_id = store.save(result)

@@ -14,8 +14,9 @@ def save(report: dict[str, Any]) -> int:
     with connection() as conn:
         cursor = conn.execute(
             "INSERT INTO topic_reports(topic, title, scope, verdict, confidence, model, "
-            "as_of, payload_json, markdown, prompt_tokens, completion_tokens, created_at) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "as_of, payload_json, markdown, prompt_tokens, completion_tokens, source_run_id, "
+            "created_at) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 report["topic"],
                 report.get("title") or "",
@@ -28,6 +29,7 @@ def save(report: dict[str, Any]) -> int:
                 report.get("markdown") or "",
                 int(report.get("prompt_tokens") or 0),
                 int(report.get("completion_tokens") or 0),
+                report.get("source_run_id"),
                 now_iso(),
             ),
         )

@@ -180,6 +180,42 @@ def test_review_http_endpoints(panel):
     assert "refreshed" in refreshed
 
 
+def test_chain_endpoint_links_derived_records(panel):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    _seed_records()
+    with connection() as conn:
+        conn.execute(
+            "INSERT INTO backtest_runs(title, spec_json, metrics_json, nav_json, periods_json, "
+            "source_run_id, created_at) VALUES('链测试', '{}', ?, '[]', '[]', 1, ?)",
+            (
+                json.dumps({"total_return_pct": 1.5, "excess_cagr_pct": 2.5,
+                            "max_drawdown_pct": -3.0, "periods": 12}),
+                "2026-11-23T10:00:00+08:00",
+            ),
+        )
+    client = TestClient(app)
+    payload = client.get("/api/ledger/chain/1").json()
+    assert payload["run"]["id"] == 1
+    assert payload["backtests"][0]["title"] == "链测试"
+    assert payload["backtests"][0]["excess_cagr_pct"] == 2.5
+    assert payload["review"]["outcome"] == "看多/正确"
+    assert client.get("/api/ledger/chain/999").status_code == 404
+
+
+def test_migration_is_idempotent(panel):
+    from app.db import init_db
+
+    init_db()
+    init_db()
+    with connection() as conn:
+        for table in ("backtest_runs", "topic_reports"):
+            columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+            assert "source_run_id" in columns
+
+
 def test_http_contract(panel):
     from fastapi.testclient import TestClient
 

@@ -32,6 +32,7 @@ class RunModel(BaseModel):
     benchmark: str = "000300.SH"
     title: str = ""
     persist: bool = True
+    source_run_id: Optional[int] = None
 
 
 @router.get("/meta")
