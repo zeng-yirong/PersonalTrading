@@ -162,6 +162,7 @@ def cmd_backfill(args: argparse.Namespace) -> int:
         force=args.force,
         max_parts=args.max_parts,
         progress=progress,
+        dates=[item.strip() for item in (args.date or "").split(",") if item.strip()] or None,
     )
     failures = 0
     print("\n回填结果：")
@@ -256,6 +257,7 @@ def build_parser() -> argparse.ArgumentParser:
     fill.add_argument("--workers", type=int, default=4, help="并发请求数，默认 4")
     fill.add_argument("--max-parts", type=int, help="每个数据集只拉前 N 段（调试用）")
     fill.add_argument("--force", action="store_true", help="忽略断点，重拉已完成的分段")
+    fill.add_argument("--date", help="只补指定日期（YYYY-MM-DD，可逗号分隔），用于修复残缺日")
     fill.add_argument("--dry-run", action="store_true", help="只打印计划，不实际拉取")
 
     sub.add_parser("plan", help="查看回填计划与进度", parents=[common]).add_argument(

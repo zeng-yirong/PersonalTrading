@@ -463,6 +463,7 @@ def run(
     force: bool = False,
     max_parts: Optional[int] = None,
     progress: Optional[Callable[[dict[str, Any]], None]] = None,
+    dates: Optional[Sequence[str]] = None,
 ) -> list[dict[str, Any]]:
     years = years or settings.sync_years
     specs = specs_for(list(names) if names else None)
@@ -474,12 +475,30 @@ def run(
     store.init_schema()
     get_rate_limiter()
     summary: list[dict[str, Any]] = []
+    wanted = {str(item) for item in dates} if dates else None
 
     for spec in specs:
         parts = build_parts(spec, years)
-        if force:
+        if wanted is not None:
+            # Targeted repair: only the named dates, and force a refetch by
+            # marking them pending instead of clearing the whole dataset.
+            parts = [part for part in parts if part.key in wanted]
+            if not parts:
+                summary.append(
+                    {
+                        "dataset": spec.name,
+                        "label": spec.label,
+                        "status": "no-matching-part",
+                        "parts": 0,
+                        "skipped": 0,
+                        "rows": 0,
+                    }
+                )
+                continue
+            store.mark_progress(spec.name, [(part.key, 0, False) for part in parts])
+        elif force:
             store.clear_progress(spec.name)
-        if max_parts:
+        if max_parts and wanted is None:
             done_map = store.dataset_progress(spec.name)
             parts = [p for p in parts if not done_map.get(p.key, (0, False))[1]][:max_parts]
         result = _run_dataset(spec, parts, provider, workers, progress)

@@ -283,6 +283,9 @@ python scripts/sync_market.py backfill --years 10
 # 只回填指定数据集
 python scripts/sync_market.py backfill --datasets daily,adj_factor,daily_basic --years 10
 
+# 修复某一天的残缺数据（不改动其他日期）
+python scripts/sync_market.py backfill --datasets margin_detail --date 2026-11-20 --years 1
+
 # 先看计划不下载
 python scripts/sync_market.py backfill --dry-run
 
