@@ -921,8 +921,9 @@ python scripts/check_sources.py --quick  # 只看能力矩阵
 **结论：到期后日线与历史查询照常，但复权因子没有降级源。** 到期前的动作：
 
 1. 确认 `adj_factor` 已回填到今天（当前已覆盖到 2026-11-23）；
-2. 决定续费，或接受"到期后新数据的复权口径退化为原始价"；
-3. 到期后每天看一眼 `ops.py health`：`daily` 应为 0 滞后，`stk_factor` / `cyq_perf` 可能变空（它们依赖 Tushare）。
+2. ~~决定续费，或接受"到期后新数据的复权口径退化为原始价"~~ → **2026-11-24 决定续费**，2026-12-19 09:00 有定时提醒；
+3. 续费后验证：`check_sources.py` 里 `expires_at` 已延后、`sync_market.py status` 显示 Tushare 可用；
+4. 无论是否续费，每天看一眼 `ops.py health`：`daily` 应为 0 滞后，`stk_factor` / `cyq_perf` 可能变空（它们依赖 Tushare）。
 
 ## 配置
 
