@@ -13,6 +13,7 @@ import type {
   MarketSectors,
   StockContextPayload,
   StockRef,
+  TopicReportDetail,
   TopicToday,
 } from '../types'
 
@@ -62,8 +63,32 @@ const today = ref<TopicToday | null>(null)
 const todayBusy = ref(false)
 const todayError = ref('')
 const todaySeconds = ref(0)
+const viewing = ref<TopicReportDetail | null>(null)
+const showHistory = ref(false)
 let ticker: ReturnType<typeof setInterval> | null = null
 let startedAt = 0
+
+const sentiment = computed(() => today.value?.sentiment ?? null)
+const history = computed(() => today.value?.history ?? [])
+const shownReport = computed(() => viewing.value ?? today.value?.report ?? null)
+
+const spark = computed(() => {
+  const points = (sentiment.value?.points ?? []).slice(-20)
+  if (points.length < 2) return ''
+  const width = 220
+  const height = 44
+  const scores = points.map((point) => point.score)
+  const low = Math.min(...scores)
+  const high = Math.max(...scores)
+  const span = high - low || 1
+  return points
+    .map((point, index) => {
+      const x = (index / (points.length - 1)) * width
+      const y = height - ((point.score - low) / span) * (height - 6) - 3
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
+})
 
 async function loadToday() {
   try {
@@ -77,6 +102,7 @@ async function runToday(force: boolean) {
   if (todayBusy.value) return
   todayBusy.value = true
   todayError.value = ''
+  viewing.value = null
   todaySeconds.value = 0
   startedAt = Date.now()
   ticker = setInterval(() => {
@@ -92,6 +118,14 @@ async function runToday(force: boolean) {
       clearInterval(ticker)
       ticker = null
     }
+  }
+}
+
+async function openHistory(item: { id: number }) {
+  try {
+    viewing.value = await api.topicReport(item.id)
+  } catch (exc) {
+    todayError.value = exc instanceof Error ? exc.message : String(exc)
   }
 }
 
@@ -341,22 +375,82 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
         </div>
 
         <div v-if="todayBusy" class="market-brief-wait">
-          正在让模型写复盘（{{ todaySeconds }} 秒）——大约 15k tokens，请保持页面打开。
+          正在让模型写复盘（{{ todaySeconds }} 秒）——大约 3–8k tokens，请保持页面打开。
         </div>
         <div v-else-if="todayError" class="error-bar">{{ todayError }}</div>
-        <template v-else-if="today?.report">
-          <div class="market-brief-actions">
-            <span class="market-card-note">
-              生成于 {{ today.report.created_at?.slice(0, 16).replace('T', ' ') }}
-              <template v-if="today.cached"> · 来自缓存（未重复调用模型）</template>
-            </span>
+        <template v-else>
+          <div v-if="sentiment" class="brief-stats">
+            <div class="brief-stat">
+              <span>情绪温度</span>
+              <strong>{{ sentiment.score.toFixed(1) }}</strong>
+              <em :class="(sentiment.change ?? 0) >= 0 ? 'up' : 'down'">
+                {{ (sentiment.change ?? 0) >= 0 ? '+' : '' }}{{ (sentiment.change ?? 0).toFixed(1) }}
+              </em>
+            </div>
+            <div class="brief-stat">
+              <span>阶段</span>
+              <strong>{{ sentiment.stage }}</strong>
+              <em>5日 {{ (sentiment.change_5d ?? 0) >= 0 ? '+' : '' }}{{ (sentiment.change_5d ?? 0).toFixed(1) }}</em>
+            </div>
+            <div class="brief-stat">
+              <span>板块扩散</span>
+              <strong>{{ (sentiment.components.sector_up_ratio ?? 0).toFixed(1) }}%</strong>
+              <em>{{ sentiment.components.industries ?? '—' }} 行业</em>
+            </div>
+            <div class="brief-stat">
+              <span>涨停 / 跌停</span>
+              <strong>{{ sentiment.components.limit_up ?? '—' }} / {{ sentiment.components.limit_down ?? '—' }}</strong>
+            </div>
+            <div class="brief-stat">
+              <span>上涨占比</span>
+              <strong>{{ (sentiment.components.up_ratio ?? 0).toFixed(1) }}%</strong>
+              <em>站上20日线 {{ (sentiment.components.above_ma20_ratio ?? 0).toFixed(1) }}%</em>
+            </div>
+            <div class="brief-stat">
+              <span>成交额</span>
+              <strong>{{ ((sentiment.components.amount_yi ?? 0) / 10000).toFixed(2) }} 万亿</strong>
+              <em>{{ sentiment.components.amount_ratio ?? '—' }}× 20日均量</em>
+            </div>
           </div>
-          <div class="markdown market-brief-body" v-html="renderBrief(today.report.markdown)"></div>
+
+          <svg v-if="spark" class="brief-spark" viewBox="0 0 220 44" preserveAspectRatio="none" role="img" aria-label="近 20 日情绪分数">
+            <polyline :points="spark" fill="none" stroke="var(--accent)" stroke-width="2" />
+          </svg>
+
+          <div class="market-brief-actions">
+            <template v-if="shownReport">
+              <span class="market-card-note">
+                {{ shownReport.as_of }} · {{ shownReport.verdict }} {{ shownReport.confidence }} 分 · {{ shownReport.model }}
+                <template v-if="today?.cached && !viewing"> · 来自缓存（未重复调用模型）</template>
+              </span>
+            </template>
+            <span style="flex: 1" />
+            <button v-if="viewing" type="button" class="btn ghost" @click="viewing = null">回到今天</button>
+            <button v-if="history.length" type="button" class="btn ghost" @click="showHistory = !showHistory">
+              {{ showHistory ? '收起历史' : `历史复盘（${history.length}）` }}
+            </button>
+          </div>
+
+          <div v-if="showHistory" class="brief-history">
+            <button
+              v-for="item in history"
+              :key="item.id"
+              type="button"
+              class="brief-history-row"
+              @click="openHistory(item)"
+            >
+              <span class="mono">{{ item.as_of }}</span>
+              <span class="brief-history-title">{{ item.title }}</span>
+              <span>{{ item.verdict }} · {{ item.confidence }} 分</span>
+            </button>
+          </div>
+
+          <div v-if="shownReport" class="markdown market-brief-body" v-html="renderBrief(shownReport.markdown)"></div>
+          <div v-else class="market-brief-wait">
+            今天还没生成。点右上角「一键今日复盘」，会基于当前面板数据写一份
+            <strong>情绪温度 / 所处阶段 / 板块结构</strong> 的备忘；约 30–60 秒，结果当天保留在这里。
+          </div>
         </template>
-        <div v-else class="market-brief-wait">
-          今天还没生成。点右上角「一键今日复盘」，会基于当前面板数据写一份
-          <strong>情绪温度 / 所处阶段 / 板块结构</strong> 的备忘；约 40–90 秒，结果当天保留在这里。
-        </div>
       </div>
 
       <div class="panel market-card span-2">

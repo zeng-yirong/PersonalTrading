@@ -787,11 +787,55 @@ export interface TopicReport extends TopicReportDetail {
   data_gaps: string[]
 }
 
+export interface TopicSentimentPoint {
+  date: string
+  score: number
+  up_ratio: number
+  above_ma20_ratio: number
+  limit_up: number
+  limit_down: number
+  amount_yi: number
+  amount_ratio: number | null
+  sector_up_ratio: number
+}
+
+export interface TopicSentiment {
+  as_of: string
+  score: number
+  prev_score: number | null
+  change: number | null
+  change_5d: number | null
+  stage: string
+  components: {
+    up_ratio?: number
+    above_ma20_ratio?: number
+    limit_up?: number
+    limit_down?: number
+    amount_yi?: number
+    amount_ratio?: number | null
+    sector_up_ratio?: number
+    industries?: number
+  }
+  points: TopicSentimentPoint[]
+}
+
+export interface TopicTodayHistoryItem {
+  id: number
+  title: string
+  as_of: string
+  verdict: string
+  confidence: number
+  model: string
+  created_at: string
+}
+
 export interface TopicToday {
   report: TopicReportDetail | null
   cached: boolean
   as_of: string | null
   stale: boolean
+  sentiment?: TopicSentiment | null
+  history?: TopicTodayHistoryItem[]
 }
 
 export interface TopicReportSummary {

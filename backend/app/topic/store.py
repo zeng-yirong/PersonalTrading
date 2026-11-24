@@ -76,3 +76,14 @@ def latest_for_topic(topic: str) -> Optional[dict[str, Any]]:
     item = dict(row)
     item["report"] = json.loads(item.pop("payload_json") or "{}")
     return item
+
+def list_for_topic(topic: str, limit: int = 10) -> list[dict[str, Any]]:
+    """History of one fixed topic (the daily brief), newest first."""
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT id, topic, title, scope, verdict, confidence, model, as_of, created_at, "
+            "prompt_tokens, completion_tokens FROM topic_reports "
+            "WHERE topic = ? ORDER BY id DESC LIMIT ?",
+            (topic, limit),
+        ).fetchall()
+    return [dict(row) for row in rows]

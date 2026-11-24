@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from app.agents.llm import LLMError
 from app.config import settings
 from app.data import store
+from app.market import sentiment as sentiment_series
 from app.topic import service
 from app.topic.service import TopicError
 
@@ -41,15 +42,20 @@ class TodayModel(BaseModel):
 
 @router.get("/today")
 async def today_cached() -> dict[str, Any]:
-    """今天的「一键复盘」是否已经生成过（只读缓存，不调用模型）。"""
-    return await run_in_threadpool(service.daily_cached)
+    """今天的「一键复盘」缓存 + 情绪序列 + 历史。只读，不调用模型。"""
+    payload = await run_in_threadpool(service.daily_cached)
+    payload["sentiment"] = await run_in_threadpool(sentiment_series.series)
+    payload["history"] = await run_in_threadpool(service.daily_history, 8)
+    return payload
 
 
 @router.post("/today")
 async def today_brief(payload: TodayModel) -> dict[str, Any]:
     """生成今日复盘：情绪温度、所处阶段、板块结构；当天已生成则直接复用。"""
     try:
-        return await service.daily_brief(force=payload.force, model=payload.model)
+        result = await service.daily_brief(force=payload.force, model=payload.model)
+        result["history"] = await run_in_threadpool(service.daily_history, 8)
+        return result
     except LLMError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except TopicError as exc:

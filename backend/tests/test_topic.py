@@ -346,24 +346,54 @@ def test_http_contract(panel, monkeypatch):
     assert client.get("/api/topics/reports/99999").status_code == 404
     assert client.post("/api/topics/research", json={"topic": "白"}).status_code == 400
 
+DAILY_REPLY = {
+    "title": "情绪冲高回落，阶段转退潮",
+    "stage": "退潮",
+    "summary": "情绪分数 39.0，较前一日 61.6 回落 22.6；上涨占比 35.01%，涨停 55 家、跌停 2 家，成交额 16678 亿元。",
+    "sentiment": {"view": "冲高后承接不足", "evidence": ["上涨占比 35.01%", "涨停 55 家", "成交额 16678 亿"]},
+    "sectors": {
+        "leaders": [{"name": "银行", "pct": 1.2, "note": "防御资金流入"}],
+        "laggards": [{"name": "军工", "pct": -2.1, "note": "高位回落"}],
+        "diffusion": "行业上涨占比 42.6%",
+    },
+    "risks": ["量能不足"],
+    "watching": ["次日涨停家数"],
+    "data_gaps": [],
+}
+
+
 def test_daily_brief_caches_within_the_same_trade_date(panel, monkeypatch):
-    fake = FakeClient(GOOD_REPLY)
+    import asyncio
+
+    fake = FakeClient(DAILY_REPLY)
     monkeypatch.setattr(service, "_client", lambda model="": fake)
 
-    first = service.run_sync(service.DAILY_TOPIC)
+    first = asyncio.run(service.daily_brief())
+    assert first["cached"] is False
     assert fake.calls == 1
-
-    import asyncio
+    assert first["report"]["report"]["stage"] == "退潮"
 
     cached = asyncio.run(service.daily_brief())
     assert cached["cached"] is True
-    assert cached["report"]["id"] == first["id"]
-    assert cached["stale"] is False
+    assert cached["report"]["id"] == first["report"]["id"]
     assert fake.calls == 1          # 没有再次调用模型
 
     forced = asyncio.run(service.daily_brief(force=True))
     assert forced["cached"] is False
     assert fake.calls == 2
+
+
+def test_daily_brief_falls_back_when_model_is_unstructured(panel, monkeypatch):
+    import asyncio
+
+    fake = FakeClient({})
+    monkeypatch.setattr(service, "_client", lambda model="": fake)
+    result = asyncio.run(service.daily_brief())
+    report = result["report"]["report"]
+    assert report.get("fallback") is True
+    assert report["stage"]
+    assert "规则版" in result["report"]["title"]
+    assert fake.calls == 2          # 原调用 + 一次修复
 
 
 def test_daily_today_http_contract(panel, monkeypatch):

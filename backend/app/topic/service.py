@@ -14,7 +14,8 @@ from typing import Any, Optional
 
 from app.agents.llm import ChatClient, LLMError
 from app.data import store as market_store
-from app.topic import context, prompts, store
+from app.market import sentiment as sentiment_series
+from app.topic import context, daily, prompts, store
 
 MAX_TOPIC_CHARS = 80
 MIN_TOPIC_CHARS = 2
@@ -126,17 +127,54 @@ def daily_cached() -> dict[str, Any]:
 
 
 async def daily_brief(force: bool = False, model: str = "") -> dict[str, Any]:
-    """Generate (or reuse) today's market brief: sentiment, stage, sectors."""
+    """Generate (or reuse) today's market brief: sentiment, stage, sectors.
+
+    专用 prompt + 规则兜底：模型结构化失败时不再报错，而是返回规则版摘要。
+    """
     status = daily_cached()
     if status["report"] and not force and not status["stale"]:
         return status
-    report = await research(DAILY_TOPIC, model=model)
-    return {
+
+    sentiment = sentiment_series.series()
+    client = _client(model)
+    available, reason = client.available()
+    if not available:
+        raise LLMError(reason)
+
+    report = await daily.generate(client, sentiment, client.model)
+    usage = client.usage.as_dict()
+    markdown = daily.render(report, sentiment)
+    verdict = daily._stage_verdict(report.get("stage") or "中性")
+    record = {
+        "topic": DAILY_TOPIC,
+        "title": report.get("title") or "今日市场复盘",
+        "scope": "大盘",
+        "verdict": verdict,
+        "confidence": int(round(float(sentiment.get("score") or 0))),
+        "model": report.get("model") or client.model,
+        "as_of": sentiment.get("as_of"),
         "report": report,
-        "cached": False,
-        "as_of": report.get("as_of"),
-        "stale": False,
+        "markdown": markdown,
+        "context_summary": {"sentiment": sentiment.get("components")},
+        "data_gaps": report.get("data_gaps") or [],
+        "usage": usage,
+        "source_run_id": None,
     }
+    record["prompt_tokens"] = usage["prompt_tokens"]
+    record["completion_tokens"] = usage["completion_tokens"]
+    record["id"] = store.save(record)
+    record["created_at"] = _created_at(record["id"])
+    return {
+        "report": record,
+        "cached": False,
+        "as_of": sentiment.get("as_of"),
+        "stale": False,
+        "sentiment": sentiment,
+    }
+
+
+def daily_history(limit: int = 8) -> list[dict[str, Any]]:
+    return store.list_for_topic(DAILY_TOPIC, limit)
 
 
 def preview(topic: str) -> dict[str, Any]:
