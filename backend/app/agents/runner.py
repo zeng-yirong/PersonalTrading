@@ -176,7 +176,6 @@ def build_report(state: dict[str, Any], ctx: dict[str, Any], usage: dict[str, in
             if plan["reward_risk"] < 1.5:
                 lines.append("- 赔率不足 1.5:1，按交易员规则本应观望，请以风控裁定为准。")
         lines.append("")
-        lines.append("> 目标价与期望收益是模型推算，不是保证；收盘价与面板数据可能延迟。")
     else:
         lines.append("交易员没有给出目标价与止损价（可能判定数据不足）。")
 
@@ -241,7 +240,7 @@ def build_report(state: dict[str, Any], ctx: dict[str, Any], usage: dict[str, in
         for item in errors:
             lines.append(f"- {item}")
         lines.append("")
-    lines.extend(["---", "", DISCLAIMER, ""])
+    lines.extend(["---", ""])
     return "\n".join(lines)
 
 

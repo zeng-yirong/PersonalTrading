@@ -159,13 +159,44 @@ def overview() -> dict[str, Any]:
 
             level1 = [row for row in rows if row[0].endswith("0.SI")]
             level2 = [row for row in rows if not row[0].endswith("0.SI")]
+            level1_bucket = _bucket(level1)
+            total_amount = sum(float(row[3] or 0) for row in level1) or 1.0
+            top5 = sum(float(row[3] or 0) for row in level1[:5])
+            level1_bucket["concentration"] = round(top5 / total_amount * 100, 1)
+            prev_date = None
+            found = _optional(
+                conn,
+                "SELECT MAX(trade_date) FROM sw_daily WHERE trade_date < ?",
+                [sector_date],
+            )
+            prev_date = found[0][0] if found else None
+            if prev_date is not None:
+                prev_rows = _optional(
+                    conn,
+                    "SELECT name, pct_change FROM sw_daily "
+                    "WHERE trade_date = ? AND pct_change IS NOT NULL "
+                    "  AND ts_code LIKE '801%.SI' AND ts_code LIKE '%0.SI' AND name NOT LIKE '申万%' "
+                    "ORDER BY pct_change DESC LIMIT 5",
+                    [prev_date],
+                )
+                today_map = {row[1]: float(row[2]) for row in level1}
+                level1_bucket["continuity"] = [
+                    {
+                        "name": row[0],
+                        "prev_pct": round(float(row[1]), 2),
+                        "today_pct": round(today_map.get(row[0], 0.0), 2),
+                    }
+                    for row in prev_rows
+                ]
             sectors = {
                 "date": sector_date,
-                "level1": _bucket(level1),
+                "level1": level1_bucket,
                 "level2": _bucket(level2),
                 # 默认口径仍是一级，前端切换时用上面两块
                 "top": _bucket(level1)["top"],
                 "bottom": _bucket(level1)["bottom"],
+                "concentration": level1_bucket["concentration"],
+                "continuity": level1_bucket.get("continuity", []),
                 "industries": len(level1),
             }
 
@@ -226,6 +257,24 @@ def overview() -> dict[str, Any]:
                     "hgt": float(found[0][1] or 0),
                     "sgt": float(found[0][2] or 0),
                 }
+
+        def _ret5(code: str):
+            rows = _optional(
+                conn,
+                "SELECT close FROM index_daily WHERE ts_code = ? AND trade_date <= ? "
+                "ORDER BY trade_date DESC LIMIT 6",
+                [code, latest],
+            )
+            if len(rows) < 6 or not rows[5][0]:
+                return None
+            return round((float(rows[0][0]) / float(rows[5][0]) - 1) * 100, 2)
+
+        large, small = _ret5("000300.SH"), _ret5("000852.SH")
+        style = {
+            "large_ret5": large,
+            "small_ret5": small,
+            "spread": round(large - small, 2) if large is not None and small is not None else None,
+        }
 
         margin_rows = _optional(
             conn,
@@ -288,6 +337,7 @@ def overview() -> dict[str, Any]:
         "money": {"net_mf_amount": net_mf, "date": money_date},
         "north": north,
         "margin": margin,
+        "style": style,
         "sectors": sectors,
         "distribution": distribution,
         "money_by_industry": {

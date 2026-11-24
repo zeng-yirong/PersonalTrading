@@ -16,13 +16,16 @@ writes prose around these numbers.
 
 from __future__ import annotations
 
+import time
 from datetime import date, timedelta
 from typing import Any, Optional
 
 from app.data import store
 
-LOOKBACK_DAYS = 40
+LOOKBACK_DAYS = 400
 SERIES_DAYS = 30
+PERCENTILE_WINDOW = 250
+_CACHE: dict[str, Any] = {"key": None, "value": None}
 
 
 def _num(value: Any) -> Optional[float]:
@@ -152,8 +155,8 @@ def _score(row: dict[str, Any]) -> float:
     )
 
 
-def series(days: int = SERIES_DAYS) -> dict[str, Any]:
-    """最近 ``days`` 个交易日的情绪序列 + 当日分项 + 阶段判断。"""
+def _series_uncached(days: int = SERIES_DAYS) -> dict[str, Any]:
+    """最近 ``days`` 个交易日的情绪序列 + 当日分项 + 阶段判断（带 5 分钟缓存）。"""
     with store.session(read_only=True) as conn:
         latest = conn.execute("SELECT MAX(trade_date) FROM daily").fetchone()[0]
         if latest is None:
@@ -177,6 +180,22 @@ def series(days: int = SERIES_DAYS) -> dict[str, Any]:
         row["score"] = _score(row)
         points.append(row)
 
+    # 分位：今天在近一年的样本里排第几（0=最冷，100=最热）
+    window = points[-PERCENTILE_WINDOW:]
+    scores = [point["score"] for point in window]
+    amounts = [point["amount_yi"] for point in window]
+    today_point = points[-1]
+    percentile = (
+        round(sum(1 for value in scores if value <= today_point["score"]) / len(scores) * 100, 1)
+        if scores
+        else None
+    )
+    amount_percentile = (
+        round(sum(1 for value in amounts if value <= today_point["amount_yi"]) / len(amounts) * 100, 1)
+        if amounts
+        else None
+    )
+
     points = points[-days:]
     if not points:
         return {"as_of": latest.isoformat(), "points": [], "score": None}
@@ -194,6 +213,9 @@ def series(days: int = SERIES_DAYS) -> dict[str, Any]:
         "change": change,
         "change_5d": change5,
         "stage": _label(today["score"], change, prev["score"] if prev else None),
+        "percentile": percentile,
+        "amount_percentile": amount_percentile,
+        "samples": len(window),
         "components": {
             "up_ratio": today.get("up_ratio"),
             "above_ma20_ratio": today.get("above_ma20_ratio"),
@@ -206,3 +228,13 @@ def series(days: int = SERIES_DAYS) -> dict[str, Any]:
         },
         "points": points,
     }
+
+def series(days: int = SERIES_DAYS, force: bool = False) -> dict[str, Any]:
+    """5 分钟内复用同一份序列：GET /topics/today 每次都会要它。"""
+    now = time.time()
+    cached = _CACHE.get("value")
+    if not force and cached is not None and now - float(_CACHE.get("ts") or 0) < 300:
+        return cached
+    value = _series_uncached(days)
+    _CACHE.update({"value": value, "ts": now})
+    return value

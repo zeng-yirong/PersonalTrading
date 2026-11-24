@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 from app.agents.llm import ChatClient, LLMError
 from app.data import store as market_store
+from app.market import overview as market_overview
 from app.market import sentiment as sentiment_series
 from app.topic import context, daily, prompts, store
 
@@ -141,7 +142,9 @@ async def daily_brief(force: bool = False, model: str = "") -> dict[str, Any]:
     if not available:
         raise LLMError(reason)
 
-    report = await daily.generate(client, sentiment, client.model)
+    overview = market_overview.overview()
+    previous = _previous_brief(sentiment.get("as_of"))
+    report = await daily.generate(client, sentiment, overview, previous)
     usage = client.usage.as_dict()
     markdown = daily.render(report, sentiment)
     verdict = daily._stage_verdict(report.get("stage") or "中性")
@@ -173,8 +176,37 @@ async def daily_brief(force: bool = False, model: str = "") -> dict[str, Any]:
     }
 
 
+def _previous_brief(as_of: Any) -> Any:
+    """上一份复盘（用于「昨日判断对照」）。"""
+    for item in store.list_for_topic(DAILY_TOPIC, 4):
+        if str(item.get("as_of")) == str(as_of):
+            continue
+        detail = store.get(item["id"]) or {}
+        payload = detail.get("report") or {}
+        return {
+            "as_of": item.get("as_of"),
+            "stage": payload.get("stage"),
+            "summary": payload.get("summary"),
+            "watching": payload.get("watching"),
+            "action": payload.get("action"),
+            "stance": payload.get("stance"),
+        }
+    return None
+
+
 def daily_history(limit: int = 8) -> list[dict[str, Any]]:
-    return store.list_for_topic(DAILY_TOPIC, limit)
+    """One row per trading day (同一交易日多次重新生成时只留最新一份)。"""
+    seen: set[str] = set()
+    output: list[dict[str, Any]] = []
+    for row in store.list_for_topic(DAILY_TOPIC, max(limit * 3, 12)):
+        day = str(row.get("as_of"))
+        if day in seen:
+            continue
+        seen.add(day)
+        output.append(row)
+        if len(output) >= limit:
+            break
+    return output
 
 
 def preview(topic: str) -> dict[str, Any]:

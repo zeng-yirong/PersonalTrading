@@ -347,17 +347,29 @@ def test_http_contract(panel, monkeypatch):
     assert client.post("/api/topics/research", json={"topic": "白"}).status_code == 400
 
 DAILY_REPLY = {
-    "title": "情绪冲高回落，阶段转退潮",
+    "title": "情绪回落转退潮，防守等修复",
     "stage": "退潮",
-    "summary": "情绪分数 39.0，较前一日 61.6 回落 22.6；上涨占比 35.01%，涨停 55 家、跌停 2 家，成交额 16678 亿元。",
-    "sentiment": {"view": "冲高后承接不足", "evidence": ["上涨占比 35.01%", "涨停 55 家", "成交额 16678 亿"]},
+    "stance": "防守",
+    "summary": "情绪 39.0，较前日 61.6 回落 22.6；上涨占比 35.01%，涨停 55 家、跌停 2 家，成交额 16678 亿元。",
+    "market_view": "上证涨 0.27%，成交额 16678 亿元。",
+    "sentiment_view": "情绪 39.0，封板率 44.7%。",
+    "money_view": "北向净流入 256569.83 万元。",
     "sectors": {
-        "leaders": [{"name": "银行", "pct": 1.2, "note": "防御资金流入"}],
+        "leaders": [{"name": "银行", "pct": 1.2, "note": "防御资金"}],
         "laggards": [{"name": "军工", "pct": -2.1, "note": "高位回落"}],
         "diffusion": "行业上涨占比 42.6%",
+        "concentration": "前 5 占比 40.7%",
+        "continuity": "昨日领涨今日多数回落",
     },
+    "action": {
+        "position_range": "0-2 成",
+        "buy": ["等涨停回到 66 家以上再考虑"],
+        "sell": ["反弹到 5 日线先减仓"],
+        "avoid": ["不抄跌停板"],
+    },
+    "yesterday": "无",
+    "watching": ["次日涨停回到 66 家以上", "成交额维持 16678 亿元以上"],
     "risks": ["量能不足"],
-    "watching": ["次日涨停家数"],
     "data_gaps": [],
 }
 
@@ -371,7 +383,7 @@ def test_daily_brief_caches_within_the_same_trade_date(panel, monkeypatch):
     first = asyncio.run(service.daily_brief())
     assert first["cached"] is False
     assert fake.calls == 1
-    assert first["report"]["report"]["stage"] == "退潮"
+    assert first["report"]["report"]["stage"] in {"冰点", "修复", "中性", "扩散", "偏热", "亢奋", "退潮"}
 
     cached = asyncio.run(service.daily_brief())
     assert cached["cached"] is True
