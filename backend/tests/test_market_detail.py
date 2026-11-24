@@ -39,6 +39,14 @@ def panel(tmp_path, monkeypatch):
                     "volume": 1e6, "amount": 1e9, "adj_factor": 1.0,
                 }
             )
+        # 只在 daily 里出现、symbols 里没有的 ETF：用来验证自动补登记
+        rows.append(
+            {
+                "symbol": "159999", "trade_date": day, "open": 1.0, "high": 1.01,
+                "low": 0.99, "close": 1.0, "pre_close": 0.99,
+                "volume": 1e5, "amount": 1e8, "adj_factor": 1.0,
+            }
+        )
     store.upsert_daily(rows, "test")
 
     def table(name, columns, key, values):
@@ -99,6 +107,42 @@ def panel(tmp_path, monkeypatch):
           [{"trade_date": days[-1], "data_type": "热股", "ts_code": "600519.SH",
             "ts_name": "贵州茅台", "rank": 1, "pct_change": 1.5, "hot": 98888.0}])
     return days
+
+
+def test_symbols_are_healed_from_daily(panel):
+    """新 ETF 只出现在 daily 里时，breadth/detail 不能把它当成不存在。"""
+    from app.data import store
+
+    with store.session(read_only=True) as conn:
+        before = conn.execute("SELECT 1 FROM symbols WHERE symbol = '159999'").fetchone()
+    assert before is None
+    added = store.backfill_symbols_from_daily()
+    assert added >= 1
+    with store.session(read_only=True) as conn:
+        row = conn.execute(
+            "SELECT ts_code, exchange, asset_type FROM symbols WHERE symbol = '159999'"
+        ).fetchone()
+    assert row == ("159999.SZ", "SZSE", "etf")
+    assert store.backfill_symbols_from_daily() == 0   # 幂等
+
+
+def test_detail_survives_missing_optional_tables(panel, monkeypatch):
+    """面板只同步了日线时，详情页不能因为缺 screen_snapshot 直接 500。"""
+    from app.data import store as store_module
+
+    real = store_module.table_exists
+    monkeypatch.setattr(
+        store_module,
+        "table_exists",
+        lambda conn, name: False
+        if name in {"screen_snapshot", "fina_indicator_vip"}
+        else real(conn, name),
+    )
+    monkeypatch.setattr(detail_module.intraday, "latest_or_cached", lambda symbol: None)
+    payload = detail_module.detail("600519")
+    assert payload is not None
+    assert payload["factors"] is None
+    assert payload["financial"] is None
 
 
 def test_overview_shape(panel):

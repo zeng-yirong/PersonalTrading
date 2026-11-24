@@ -206,7 +206,7 @@ export interface StockFinancial {
 export interface IntradayPoint {
   time: string
   price: number
-  avg: number
+  avg: number | null
   volume: number
   amount: number
 }

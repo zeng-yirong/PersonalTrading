@@ -98,9 +98,14 @@ async def ask(payload: AskModel) -> dict:
     if not payload.text.strip():
         raise HTTPException(status_code=400, detail="请描述筛选条件")
     try:
-        result = await nl.parse_and_run(payload.text, limit=payload.limit)
+        parsed = await nl.parse(payload.text, limit=payload.limit)
     except QueryError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LLMError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return result
+    # The DuckDB query is blocking; keep it off the event loop so SSE streams
+    # and other requests are not stalled behind a full-market scan.
+    try:
+        return await run_in_threadpool(screen_query.run, parsed)
+    except QueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -175,3 +175,14 @@ def test_run_returns_empty_when_nothing_matches(snapshot):
     result = screen_query.run(query)
     assert result["total_matched"] == 0
     assert result["rows"] == []
+
+def test_from_dict_rejects_bad_shapes():
+    """LLM 偶尔会给出 limit:"30 条"、universe:"all" 这类值，应该是 400 而不是 500。"""
+    with pytest.raises(screen_query.QueryError):
+        screen_query.ScreenQuery.from_dict({"limit": "30 条"})
+    with pytest.raises(screen_query.QueryError):
+        screen_query.ScreenQuery.from_dict({"universe": "all"})
+    with pytest.raises(screen_query.QueryError):
+        screen_query.ScreenQuery.from_dict(
+            {"filters": [{"field": "pe_ttm", "op": "<", "value": 1}] * 13}
+        )

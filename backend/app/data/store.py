@@ -362,6 +362,73 @@ def upsert_symbols(rows: Iterable[dict[str, Any]]) -> int:
     return len(payload)
 
 
+def backfill_symbols_from_daily(lookback_days: int = 10) -> int:
+    """Add codes that trade in ``daily`` but never made it into ``symbols``.
+
+    Tushare returns bars for every listed code, while ``symbols`` is filled by
+    the Sina/Eastmoney universe pull. New ETFs and BJ listings therefore stayed
+    invisible to breadth / detail / screener for weeks. One SQL pass closes the
+    gap; names come from ``fund_basic`` when the code is an ETF.
+    """
+    with session() as conn:
+        if not table_exists(conn, "daily"):
+            return 0
+        before = conn.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
+        fund_join = "LEFT JOIN (SELECT split_part(ts_code, '.', 1) AS symbol, name FROM fund_basic WHERE market = 'E') f ON f.symbol = d.symbol"
+        name_expr = "COALESCE(f.name, d.symbol)"
+        if not table_exists(conn, "fund_basic"):
+            fund_join = ""
+            name_expr = "d.symbol"
+        conn.execute(
+            f"""
+            INSERT INTO symbols
+                (symbol, ts_code, name, exchange, asset_type, board, industry,
+                 list_date, delist_date, is_active, updated_at)
+            SELECT d.symbol,
+                   CASE
+                       WHEN d.symbol LIKE '6%' OR d.symbol LIKE '5%' THEN d.symbol || '.SH'
+                       WHEN d.symbol LIKE '4%' OR d.symbol LIKE '8%' OR d.symbol LIKE '92%'
+                           THEN d.symbol || '.BJ'
+                       ELSE d.symbol || '.SZ'
+                   END,
+                   {name_expr},
+                   CASE
+                       WHEN d.symbol LIKE '6%' OR d.symbol LIKE '5%' THEN 'SSE'
+                       WHEN d.symbol LIKE '4%' OR d.symbol LIKE '8%' OR d.symbol LIKE '92%'
+                           THEN 'BJSE'
+                       ELSE 'SZSE'
+                   END,
+                   CASE WHEN regexp_matches(d.symbol, '^(15|16|18|5[0-8])')
+                        THEN 'etf' ELSE 'stock' END,
+                   CASE
+                       WHEN regexp_matches(d.symbol, '^(15|16|18|5[0-8])') THEN NULL
+                       WHEN d.symbol LIKE '688%' THEN '科创板'
+                       WHEN d.symbol LIKE '30%' THEN '创业板'
+                       WHEN d.symbol LIKE '4%' OR d.symbol LIKE '8%' OR d.symbol LIKE '92%'
+                           THEN '北交所'
+                       WHEN d.symbol LIKE '6%' THEN '沪市主板'
+                       ELSE '深市主板'
+                   END,
+                   NULL, NULL, NULL, TRUE, now()
+            FROM (
+                SELECT DISTINCT symbol FROM daily
+                WHERE trade_date >= (SELECT MAX(trade_date) FROM daily) - INTERVAL '{lookback_days} days'
+            ) d
+            LEFT JOIN symbols s ON s.symbol = d.symbol
+            {fund_join}
+            WHERE s.symbol IS NULL
+            """
+        )
+        # 早先的推断把 5xxxxx 的场内 ETF 记成了深市，这里顺手纠正一次。
+        conn.execute(
+            "UPDATE symbols SET ts_code = symbol || '.SH', exchange = 'SSE', board = NULL "
+            "WHERE asset_type = 'etf' AND symbol LIKE '5%' AND ts_code NOT LIKE '%.SH'"
+        )
+        conn.execute("UPDATE symbols SET board = NULL WHERE asset_type = 'etf'")
+        after = conn.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
+    return int(after - before)
+
+
 def upsert_calendar(rows: Iterable[tuple[date, bool]], source: str = "sina") -> int:
     payload = [(_as_date(day), bool(is_open), source) for day, is_open in rows]
     payload = [row for row in payload if row[0] is not None]

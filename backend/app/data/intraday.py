@@ -114,19 +114,24 @@ def _fetch_sina(symbol: str) -> Optional[dict[str, Any]]:
         if start < 0 or end <= start:
             return None
         bars = json.loads(text[start + 1 : end])
+        # 未知代码/北交所：新浪返回 var _x=(null)，不是列表。
+        if not isinstance(bars, list):
+            return None
     except Exception:  # noqa: BLE001
         return None
     rows = []
     for bar in bars:
         try:
             close = float(bar["close"])
-            volume = float(bar.get("volume") or 0)
+            # 新浪的 volume 单位是「股」，东财是「手」；统一成手。
+            volume = float(bar.get("volume") or 0) / 100.0
+            amount = float(bar.get("amount") or 0)
         except (KeyError, TypeError, ValueError):
             continue
         stamp = str(bar.get("day") or "")
         if len(stamp) < 16:
             continue
-        rows.append((stamp[:10], stamp[11:16], close, volume))
+        rows.append((stamp[:10], stamp[11:16], close, volume, amount))
     if not rows:
         return None
     # Sina may return more than one session; keep the most recent date only.
@@ -134,7 +139,7 @@ def _fetch_sina(symbol: str) -> Optional[dict[str, Any]]:
     points = []
     cum_value = 0.0
     cum_volume = 0.0
-    for day, clock, close, volume in rows:
+    for day, clock, close, volume, amount in rows:
         if day != last_date:
             continue
         cum_value += close * volume
@@ -145,7 +150,7 @@ def _fetch_sina(symbol: str) -> Optional[dict[str, Any]]:
                 "price": close,
                 "avg": round(cum_value / cum_volume, 4) if cum_volume else None,
                 "volume": volume,
-                "amount": 0.0,
+                "amount": amount,
             }
         )
     if not points:
@@ -167,7 +172,10 @@ def fetch(symbol: str) -> Optional[dict[str, Any]]:
     if payload is not None:
         _remember(symbol, payload)
         return payload
-    return cached(symbol)
+    fallback = cached(symbol)
+    if fallback is not None:
+        fallback["stale"] = True
+    return fallback
 
 
 def _ttl_seconds() -> int:
@@ -200,7 +208,6 @@ def cached(symbol: str) -> Optional[dict[str, Any]]:
     if (datetime.now(stamp.tzinfo) - stamp).total_seconds() > _ttl_seconds():
         return None
     payload = json.loads(row["payload"])
-    payload["stale"] = True
     return payload
 
 

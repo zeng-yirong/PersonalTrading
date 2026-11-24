@@ -8,6 +8,7 @@ import type {
   OpsFingerprint,
   OpsHealth,
   OpsKind,
+  OpsLedger,
   OpsSummary,
   OpsTableStatus,
   OpsUsage,
@@ -301,28 +302,32 @@ async function load() {
   if (loading.value) return
   loading.value = true
   error.value = ''
-  try {
-    const [summaryData, ledgerData, usageData, healthData, fingerprintData] =
-      await Promise.all([
-        api.opsSummary(),
-        api.opsLedger(20),
-        api.opsUsage(14),
-        api.opsHealth(),
-        api.opsFingerprint(),
-      ])
-    summary.value = summaryData
-    entries.value = ledgerData.entries
-    usage.value = usageData
-    health.value = healthData
-    fingerprint.value = fingerprintData
-    loaded.value = true
-    await nextTick()
-    if (tab.value === 'cost') renderUsageChart()
-  } catch (exc) {
-    error.value = `运维数据加载失败：${messageOf(exc)}`
-  } finally {
-    loading.value = false
-  }
+  // 五个区块互不依赖：一个挂了不应该把整页藏起来。
+  const results = await Promise.allSettled([
+    api.opsSummary(),
+    api.opsLedger(20),
+    api.opsUsage(14),
+    api.opsHealth(),
+    api.opsFingerprint(),
+  ])
+  const failures: string[] = []
+  const label = ['汇总', '账本', '成本', '数据健康', '指纹']
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      failures.push(label[index])
+      return
+    }
+    if (index === 0) summary.value = result.value as OpsSummary
+    if (index === 1) entries.value = (result.value as OpsLedger).entries
+    if (index === 2) usage.value = result.value as OpsUsage
+    if (index === 3) health.value = result.value as OpsHealth
+    if (index === 4) fingerprint.value = result.value as OpsFingerprint
+  })
+  if (failures.length) error.value = `部分数据加载失败：${failures.join('、')}`
+  loaded.value = true
+  loading.value = false
+  await nextTick()
+  if (tab.value === 'cost') renderUsageChart()
 }
 
 async function refreshReviews() {

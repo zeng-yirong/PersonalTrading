@@ -90,8 +90,8 @@ def _run_with_oos(spec: Spec) -> dict[str, Any]:
             f"样本外 {spec.oos_months} 个月太长：开始日 {spec.start} 之后没有足够的样本内区间"
         )
     with store.session() as conn:
-        inside, inside_grid = _window(conn, spec, spec.start, split)
-        outside, outside_grid = _window(conn, spec, split, spec.end)
+        inside, inside_grid = _window(conn, spec, spec.start, split, purge=True)
+        outside, outside_grid = _window(conn, spec, split + timedelta(days=1), spec.end)
 
     outside_by_name = {item["name"]: item for item in outside}
     merged = []
@@ -166,13 +166,18 @@ def _brief(item: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     }
 
 
-def _window(conn, spec: Spec, start: date, end: date):
+def _window(conn, spec: Spec, start: date, end: date, purge: bool = False):
     days = _trade_days(conn, start, end)
     if len(days) < spec.rebalance + spec.horizon + 5:
         raise FactorError(
             f"区间太短：{len(days)} 个交易日，至少需要调仓周期 + 持有期 + 5 天"
         )
     grid = days[:: spec.rebalance]
+    if purge:
+        # 样本内最后几期的前瞻收益会跨到样本外：直接丢掉这些调仓日，
+        # 否则样本内 IC 里混进了样本外的价格。
+        index_of = {day: index for index, day in enumerate(days)}
+        grid = [day for day in grid if index_of[day] + spec.horizon < len(days)]
     features.build(conn, grid, end)
     sources = {factor.source for factor in spec.factors}
     if "alpha158" in sources:

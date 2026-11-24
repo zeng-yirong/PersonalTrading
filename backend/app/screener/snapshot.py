@@ -77,7 +77,10 @@ def _sql(latest: date, aux: dict[str, Optional[date]]) -> str:
     return f"""
 CREATE OR REPLACE TABLE {SNAPSHOT_NAME} AS
 WITH bars AS (
-    SELECT symbol, trade_date, close, high, amount, pre_close,
+    SELECT symbol, trade_date, close,
+           close * COALESCE(adj_factor, 1) AS c_adj,
+           high  * COALESCE(adj_factor, 1) AS h_adj,
+           amount, pre_close,
            row_number() OVER (PARTITION BY symbol ORDER BY trade_date DESC) AS rn
     FROM daily
     WHERE trade_date >= (DATE '{latest.isoformat()}' - INTERVAL 400 DAY)
@@ -105,17 +108,19 @@ price AS (
     SELECT
         symbol,
         MAX(CASE WHEN rn = 1 THEN close END)                        AS close,
-        MAX(CASE WHEN rn = 1 THEN close END)
-            / NULLIF(MAX(CASE WHEN rn = 2 THEN close END), 0) - 1   AS pct_chg,
-        MAX(CASE WHEN rn = 1 THEN close END)
-            / NULLIF(MAX(CASE WHEN rn = 6 THEN close END), 0) - 1   AS ret5,
-        MAX(CASE WHEN rn = 1 THEN close END)
-            / NULLIF(MAX(CASE WHEN rn = 21 THEN close END), 0) - 1  AS ret20,
-        MAX(CASE WHEN rn = 1 THEN close END)
-            / NULLIF(MAX(CASE WHEN rn = 61 THEN close END), 0) - 1  AS ret60,
-        AVG(CASE WHEN rn <= 20 THEN close END)                      AS ma20,
-        AVG(CASE WHEN rn <= 60 THEN close END)                      AS ma60,
-        MAX(CASE WHEN rn <= 250 THEN high END)                      AS high_52w,
+        MAX(CASE WHEN rn = 1 THEN c_adj END)                        AS c_adj,
+        -- 收益率与均线一律用复权价：除权/送股日的原始价会显示成假跌
+        MAX(CASE WHEN rn = 1 THEN c_adj END)
+            / NULLIF(MAX(CASE WHEN rn = 2 THEN c_adj END), 0) - 1   AS pct_chg,
+        MAX(CASE WHEN rn = 1 THEN c_adj END)
+            / NULLIF(MAX(CASE WHEN rn = 6 THEN c_adj END), 0) - 1   AS ret5,
+        MAX(CASE WHEN rn = 1 THEN c_adj END)
+            / NULLIF(MAX(CASE WHEN rn = 21 THEN c_adj END), 0) - 1  AS ret20,
+        MAX(CASE WHEN rn = 1 THEN c_adj END)
+            / NULLIF(MAX(CASE WHEN rn = 61 THEN c_adj END), 0) - 1  AS ret60,
+        AVG(CASE WHEN rn <= 20 THEN c_adj END)                      AS ma20,
+        AVG(CASE WHEN rn <= 60 THEN c_adj END)                      AS ma60,
+        MAX(CASE WHEN rn <= 250 THEN h_adj END)                     AS high_52w,
         MAX(CASE WHEN rn = 1 THEN amount END)                       AS amount,
         AVG(CASE WHEN rn <= 20 THEN amount END)                     AS avg_amount_20d
     FROM bars
@@ -143,17 +148,27 @@ factor AS (
 flow AS (
     SELECT symbol_of(ts_code) AS symbol,
            MAX(CASE WHEN trade_date = {d('moneyflow', latest)} THEN net_mf_amount END) AS mf_net_1d,
-           SUM(CASE WHEN trade_date >= DATE '{flow_since.isoformat()}' THEN net_mf_amount ELSE 0 END) AS mf_net_20d,
+           SUM(CASE WHEN rn <= 20 THEN net_mf_amount END) AS mf_net_20d,
            MAX(CASE WHEN trade_date = {d('moneyflow', latest)}
                     THEN buy_elg_amount - sell_elg_amount END) AS elg_net_1d
-    FROM moneyflow
-    WHERE trade_date >= DATE '{flow_since.isoformat()}'
-    GROUP BY symbol_of(ts_code)
+    FROM (
+        SELECT *, row_number() OVER (PARTITION BY ts_code ORDER BY trade_date DESC) AS rn
+        FROM moneyflow
+        WHERE trade_date >= DATE '{flow_since.isoformat()}'
+    )
+    GROUP BY 1
+),
+margin_prev AS (
+    SELECT trade_date FROM (
+        SELECT DISTINCT trade_date FROM margin_detail
+        WHERE trade_date <= {d('margin_detail', latest)}
+        ORDER BY trade_date DESC LIMIT 1 OFFSET 20
+    )
 ),
 margin AS (
     SELECT symbol_of(ts_code) AS symbol,
            MAX(CASE WHEN trade_date = {d('margin_detail', latest)} THEN rzye END) AS margin_bal,
-           MAX(CASE WHEN trade_date >= DATE '{margin_since.isoformat()}' THEN rzye END) AS margin_old
+           MAX(CASE WHEN trade_date = (SELECT trade_date FROM margin_prev) THEN rzye END) AS margin_old
     FROM margin_detail
     WHERE trade_date >= DATE '{margin_since.isoformat()}'
     GROUP BY symbol_of(ts_code)
@@ -197,6 +212,7 @@ fin AS (
                debt_to_assets AS debt_ratio, or_yoy AS revenue_yoy, netprofit_yoy AS profit_yoy,
                row_number() OVER (PARTITION BY ts_code ORDER BY end_date DESC) AS rn
         FROM fina_indicator_vip
+        WHERE ann_date IS NOT NULL AND ann_date <= DATE '{latest.isoformat()}'
     ) WHERE rn = 1
 ),
 {pead_cte}
@@ -208,9 +224,9 @@ SELECT
     ROUND(p.ret60 * 100, 4) AS ret60,
     p.amount, p.avg_amount_20d,
     b.turnover_rate, b.volume_ratio,
-    ROUND((p.close / NULLIF(p.ma20, 0) - 1) * 100, 4) AS gap_ma20,
-    ROUND((p.close / NULLIF(p.ma60, 0) - 1) * 100, 4) AS gap_ma60,
-    ROUND((p.close / NULLIF(p.high_52w, 0) - 1) * 100, 4) AS drawdown_52w,
+    ROUND((p.c_adj / NULLIF(p.ma20, 0) - 1) * 100, 4) AS gap_ma20,
+    ROUND((p.c_adj / NULLIF(p.ma60, 0) - 1) * 100, 4) AS gap_ma60,
+    ROUND((p.c_adj / NULLIF(p.high_52w, 0) - 1) * 100, 4) AS drawdown_52w,
     f.rsi12, f.macd_hist,
     CASE WHEN f.boll_upper > f.boll_lower
          THEN (p.close - f.boll_lower) / (f.boll_upper - f.boll_lower) END AS boll_pos,

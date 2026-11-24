@@ -16,6 +16,7 @@ from app.screener.snapshot import COLUMNS
 
 MAX_LIMIT = 200
 DEFAULT_LIMIT = 30
+MAX_FILTERS = 12
 
 
 class QueryError(ValueError):
@@ -84,19 +85,29 @@ class ScreenQuery:
             raise QueryError("查询必须是一个 JSON 对象")
 
         universe = payload.get("universe") or {}
+        if not isinstance(universe, dict):
+            raise QueryError("universe 必须是一个对象，例如 {\"asset_type\":\"stock\"}")
         asset_type = str(universe.get("asset_type") or payload.get("asset_type") or "stock")
         if asset_type not in {"stock", "etf", "all"}:
             raise QueryError("asset_type 只能是 stock / etf / all")
 
+        raw_filters = payload.get("filters") or []
+        if not isinstance(raw_filters, list):
+            raise QueryError("filters 必须是数组")
+        if len(raw_filters) > MAX_FILTERS:
+            raise QueryError(f"筛选条件最多 {MAX_FILTERS} 个")
         filters: list[Filter] = []
-        for raw in payload.get("filters") or []:
+        for raw in raw_filters:
             if not isinstance(raw, dict) or "field" not in raw or "op" not in raw:
                 raise QueryError("每个筛选条件需要 field 和 op")
+            value = raw.get("value")
+            if isinstance(value, list) and len(value) > 200:
+                raise QueryError("in 的取值列表最多 200 个")
             filters.append(
                 Filter(
                     field=str(raw["field"]),
                     op=str(raw["op"]),
-                    value=raw.get("value"),
+                    value=value,
                     value2=raw.get("value2"),
                 )
             )
@@ -109,7 +120,10 @@ class ScreenQuery:
                 sort.append({"field": str(raw["field"]), "desc": bool(raw.get("desc", True))})
 
         limit_value = payload.get("limit")
-        limit = DEFAULT_LIMIT if limit_value is None else int(limit_value)
+        try:
+            limit = DEFAULT_LIMIT if limit_value is None else int(limit_value)
+        except (TypeError, ValueError) as exc:
+            raise QueryError(f"limit 必须是整数，收到 {limit_value!r}") from exc
         return cls(
             filters=filters,
             asset_type=asset_type,

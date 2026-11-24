@@ -7,8 +7,10 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.data.store import StoreError
 from app.db import init_db
 from app.routers import (
     agents,
@@ -38,6 +40,12 @@ app = FastAPI(
     description="本地个人 A 股 / ETF 研究助手",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(StoreError)
+async def _store_unavailable(_, exc: StoreError) -> JSONResponse:
+    """面板不可用（被锁 / 未初始化）应该是 503，而不是 500。"""
+    return JSONResponse(status_code=503, content={"detail": f"市场面板不可用：{exc}"})
 
 app.add_middleware(
     CORSMiddleware,

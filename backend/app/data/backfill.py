@@ -659,4 +659,9 @@ def update_today(
         )
     if any(item["dataset"] in ADJ_DATASETS for item in results):
         store.apply_adj_factors(target)
+    # New ETF / BJ codes show up in ``daily`` before any universe pull sees them;
+    # register them so breadth, detail and the screener do not ignore them.
+    added = store.backfill_symbols_from_daily()
+    if added:
+        results.append({"dataset": "symbols", "rows": added, "status": "ok"})
     return results

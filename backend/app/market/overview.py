@@ -63,12 +63,12 @@ def overview() -> dict[str, Any]:
 
         breadth_rows = _optional(
             conn,
-            "SELECT s.asset_type, "
+            "SELECT COALESCE(s.asset_type, 'other'), "
             "       COUNT(*) FILTER (WHERE d.close > d.pre_close), "
             "       COUNT(*) FILTER (WHERE d.close < d.pre_close), "
             "       COUNT(*) FILTER (WHERE d.close = d.pre_close), "
             "       COALESCE(SUM(d.amount), 0) "
-            "FROM daily d JOIN symbols s ON s.symbol = d.symbol "
+            "FROM daily d LEFT JOIN symbols s ON s.symbol = d.symbol "
             "WHERE d.trade_date = ? GROUP BY 1",
             [latest],
         )

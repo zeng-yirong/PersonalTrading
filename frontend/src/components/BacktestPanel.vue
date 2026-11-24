@@ -467,12 +467,12 @@ defineExpose({ runWith })
         </div>
         <div class="backtest-stat">
           <span class="backtest-stat-label">胜率</span>
-          <strong>{{ num(result.metrics.hit_rate_pct) }}%</strong>
+          <strong>{{ pct(result.metrics.hit_rate_pct, 1).replace('+', '') }}</strong>
           <span class="backtest-stat-note">{{ result.metrics.periods }} 期中跑赢基准</span>
         </div>
         <div class="backtest-stat">
           <span class="backtest-stat-label">仓位</span>
-          <strong>{{ num(result.metrics.exposure_pct) }}%</strong>
+          <strong>{{ pct(result.metrics.exposure_pct, 1).replace('+', '') }}</strong>
           <span class="backtest-stat-note">平均持仓 {{ num(result.metrics.avg_positions) }} 只</span>
         </div>
         <div class="backtest-stat">

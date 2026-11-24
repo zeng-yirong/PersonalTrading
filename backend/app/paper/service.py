@@ -114,6 +114,8 @@ def trade(
     shares = float(shares)
     if shares <= 0:
         raise PaperError(f"按当前价 {price:.2f} 元，这个金额买不到一手（100 股）")
+    if side == "buy" and shares % LOT != 0:
+        raise PaperError(f"A 股买入必须是 {LOT} 股的整数倍，收到 {shares:g} 股")
 
     gross = round(shares * price, 2)
     fee = _fees(side, gross)

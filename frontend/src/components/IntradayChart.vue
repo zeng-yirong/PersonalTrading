@@ -78,9 +78,10 @@ function buildOption(data: IntradayData): echarts.EChartsOption {
   const panel = cssColor('--panel-2', '#15202b')
   const text = cssColor('--text', '#e7eef6')
 
-  const extentSource = prev === null ? [...prices, ...averages] : [...prices, ...averages, prev]
-  const low = Math.min(...extentSource)
-  const high = Math.max(...extentSource)
+  const extentSource = (prev === null ? [...prices, ...averages] : [...prices, ...averages, prev])
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  const low = extentSource.length ? Math.min(...extentSource) : 0
+  const high = extentSource.length ? Math.max(...extentSource) : 1
   const span = high - low
   const pad = span > 0 ? span * 0.08 : Math.max(Math.abs(high), 1) * 0.01
 

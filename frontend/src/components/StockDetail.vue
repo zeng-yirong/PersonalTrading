@@ -57,6 +57,8 @@ const tab = ref<ChartTab>('intraday')
 const span = ref<StockRange>('1y')
 const historyBars = ref<StockBar[]>([])
 const historyLoading = ref(false)
+const historyError = ref('')
+let historyToken = 0
 let token = 0
 
 function messageOf(exc: unknown): string {
@@ -130,7 +132,12 @@ const change = computed(() => {
 })
 
 const dayChart = computed<ChartData | null>(() => {
-  const rows = historyBars.value.length ? historyBars.value : detail.value?.chart ?? []
+  // 周K/月K 没有数据时不能回落成日线，否则标签写着「周K」却画的是 250 根日线。
+  const rows = historyBars.value.length
+    ? historyBars.value
+    : period.value === 'day'
+      ? detail.value?.chart ?? []
+      : []
   if (!rows.length) return null
   const closes = rows.map((row) => row.close)
   return {
@@ -245,14 +252,19 @@ const periodLabel = computed(() => {
 
 async function loadHistory() {
   if (!props.symbol) return
+  const current = ++historyToken
   historyLoading.value = true
+  historyError.value = ''
   try {
     const payload = await api.stockHistory(props.symbol, span.value, period.value)
+    if (current !== historyToken) return
     historyBars.value = payload.bars
-  } catch {
+  } catch (exc) {
+    if (current !== historyToken) return
     historyBars.value = []
+    historyError.value = `该周期数据加载失败：${messageOf(exc)}`
   } finally {
-    historyLoading.value = false
+    if (current === historyToken) historyLoading.value = false
   }
 }
 
@@ -416,7 +428,9 @@ watch(
             :pre-close="detail.quote.pre_close"
           />
           <PriceChart v-else-if="dayChart" :chart="dayChart" />
-          <div v-else class="chart-empty">暂无日K数据</div>
+          <div v-else class="chart-empty">
+            {{ historyLoading ? '读取中…' : historyError || '暂无该周期数据' }}
+          </div>
         </div>
       </section>
 

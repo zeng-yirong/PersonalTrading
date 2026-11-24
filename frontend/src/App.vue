@@ -309,15 +309,18 @@ function menuCopy() {
 async function generateResearch() {
   const symbol = currentSymbol.value
   if (!symbol || researchLoading.value) return
+  const token = notesToken
   researchLoading.value = true
   notesError.value = ''
   try {
     const result = await api.research(symbol)
+    // 研究要跑几十秒；期间用户可能切到别的股票，结果不能再塞进当前列表。
+    if (token !== notesToken || symbol !== currentSymbol.value) return
     notes.value = [result.note, ...notes.value.filter((item) => item.id !== result.note.id)]
   } catch (exc) {
-    notesError.value = messageOf(exc)
+    if (token === notesToken) notesError.value = messageOf(exc)
   } finally {
-    researchLoading.value = false
+    if (token === notesToken) researchLoading.value = false
   }
 }
 

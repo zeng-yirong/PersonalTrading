@@ -2,7 +2,7 @@
 import * as echarts from 'echarts'
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api } from '../api'
-import type { AgentRunSummary, StockContextPayload } from '../types'
+import type { StockContextPayload } from '../types'
 
 interface Position {
   id: number
@@ -126,13 +126,13 @@ async function load() {
 }
 
 async function fromRun() {
-  // Newest approved run with a non-zero position is the natural candidate.
-  const runs: AgentRunSummary[] = (await api.agentRuns('600519')).runs
-  const candidate = runs.find(
-    (run) =>
-      run.verdict &&
-      ['批准', '调整后批准'].includes(run.verdict.decision) &&
-      (run.verdict.final_position_pct ?? 0) > 0,
+  // 从账本里找最近一条「批准且仓位>0」的推演，而不是写死某只股票。
+  const ledger = await api.opsLedger(50, '推演')
+  const candidate = ledger.entries.find(
+    (entry) =>
+      ['批准', '调整后批准'].includes(entry.stance) &&
+      typeof entry.score === 'number' &&
+      entry.score > 0,
   )
   if (!candidate) {
     error.value = '没有可建仓的推演（需要裁定为批准且仓位大于 0）'

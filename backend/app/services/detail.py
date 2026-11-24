@@ -95,6 +95,8 @@ def _chart(conn, symbol: str, limit: int = 250) -> list[dict[str, Any]]:
 
 
 def _factors(conn, symbol: str) -> Optional[dict[str, Any]]:
+    if not store.table_exists(conn, "screen_snapshot"):
+        return None
     cursor = conn.execute("SELECT * FROM screen_snapshot WHERE symbol = ?", [symbol])
     row = cursor.fetchone()
     if row is None:
@@ -106,6 +108,8 @@ def _factors(conn, symbol: str) -> Optional[dict[str, Any]]:
 
 
 def _financial(conn, ts_code: str) -> Optional[dict[str, Any]]:
+    if not store.table_exists(conn, "fina_indicator_vip"):
+        return None
     row = conn.execute(
         "SELECT ann_date, end_date, roe, netprofit_margin, grossprofit_margin, "
         "       debt_to_assets, or_yoy, netprofit_yoy "
@@ -160,20 +164,23 @@ def _watching(symbol: str) -> bool:
 
 
 def detail(symbol: str) -> Optional[dict[str, Any]]:
+    # 只把面板查询放在 DuckDB 会话里；分时是网络请求（最坏 20+ 秒），
+    # 放在会话里会一直占着只读连接，跨进程写到同一个库会被锁住。
     with store.session(read_only=True) as conn:
         info = _info(conn, symbol)
         if info is None:
             return None
-        return {
+        payload = {
             "info": info,
             "quote": _quote(conn, symbol),
             "chart": _chart(conn, symbol),
             "factors": _factors(conn, symbol),
             "financial": _financial(conn, info["ts_code"]),
-            "intraday": intraday.latest_or_cached(symbol),
-            "runs": _runs(symbol),
-            "watching": _watching(symbol),
         }
+    payload["runs"] = _runs(symbol)
+    payload["watching"] = _watching(symbol)
+    payload["intraday"] = intraday.latest_or_cached(symbol)
+    return payload
 
 
 def _aggregate(conn, symbol: str, period: str, limit: int) -> list[dict[str, Any]]:

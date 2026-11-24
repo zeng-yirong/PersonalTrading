@@ -304,82 +304,104 @@ async def stream_research(
 
     task = asyncio.create_task(graph.ainvoke(state))
     final_state: dict[str, Any] = {}
-
-    while True:
-        try:
-            event = await asyncio.wait_for(queue.get(), timeout=0.25)
-        except asyncio.TimeoutError:
-            if task.done():
-                break
-            continue
-        if persist and event["type"] == "node_end":
-            payload = event.get("payload")
-            role = event["node"].split("_", 1)[1] if event["node"].startswith("analyst_") else event["node"]
-            round_no = None
-            if event["node"] in {"bull", "bear"}:
-                round_no = sum(
-                    1 for item in (final_state.get("debate") or []) if item["role"] == event["node"]
-                ) or None
-            await asyncio.to_thread(
-                agent_store.append_message,
-                run_id,
-                event["node"],
-                event.get("label"),
-                role,
-                round_no,
-                event.get("status", "ok"),
-                payload,
-            )
-        yield event
+    debate_counts = {"bull": 0, "bear": 0}
+    finished = False
 
     try:
-        final_state = await task
-    except Exception as exc:  # noqa: BLE001 - graph-level failure
-        message = f"{type(exc).__name__}: {exc}"
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=0.25)
+            except asyncio.TimeoutError:
+                if task.done():
+                    break
+                continue
+            if persist and event["type"] == "node_end":
+                payload = event.get("payload")
+                role = event["node"].split("_", 1)[1] if event["node"].startswith("analyst_") else event["node"]
+                round_no = None
+                if event["node"] in {"bull", "bear"}:
+                    debate_counts[event["node"]] += 1
+                    round_no = debate_counts[event["node"]]
+                await asyncio.to_thread(
+                    agent_store.append_message,
+                    run_id,
+                    event["node"],
+                    event.get("label"),
+                    role,
+                    round_no,
+                    event.get("status", "ok"),
+                    payload,
+                )
+            yield event
+
+        try:
+            final_state = await task
+        except Exception as exc:  # noqa: BLE001 - graph-level failure
+            message = f"{type(exc).__name__}: {exc}"
+            if persist and run_id:
+                await asyncio.to_thread(
+                    agent_store.finish_run,
+                    run_id,
+                    "failed",
+                    error=message,
+                    usage=client.usage.as_dict(),
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                )
+            finished = True
+            yield {"type": "error", "message": message}
+            return
+
+        usage = client.usage.as_dict()
+        final_state["model"] = client.model
+        final_state["rounds"] = rounds
+        report = build_report(final_state, ctx, usage)
+        duration_ms = int((time.perf_counter() - started) * 1000)
+
         if persist and run_id:
             await asyncio.to_thread(
                 agent_store.finish_run,
                 run_id,
-                "failed",
-                error=message,
-                usage=client.usage.as_dict(),
-                duration_ms=int((time.perf_counter() - started) * 1000),
+                "ok" if not final_state.get("errors") else "partial",
+                verdict=final_state.get("verdict"),
+                report=report,
+                usage=usage,
+                duration_ms=duration_ms,
             )
-        yield {"type": "error", "message": message}
-        return
 
-    usage = client.usage.as_dict()
-    final_state["model"] = client.model
-    final_state["rounds"] = rounds
-    report = build_report(final_state, ctx, usage)
-    duration_ms = int((time.perf_counter() - started) * 1000)
-
-    if persist and run_id:
-        await asyncio.to_thread(
-            agent_store.finish_run,
-            run_id,
-            "ok" if not final_state.get("errors") else "partial",
-            verdict=final_state.get("verdict"),
-            report=report,
-            usage=usage,
-            duration_ms=duration_ms,
-        )
-
-    yield {
-        "type": "run_end",
-        "run_id": run_id,
-        "report": report,
-        "usage": usage,
-        "duration_ms": duration_ms,
-        "verdict": final_state.get("verdict"),
-        "proposal": final_state.get("proposal"),
-        "plan": build_plan(
-            final_state.get("proposal") or {}, ctx["price"].get("last_close")
-        ),
-        "consensus": final_state.get("consensus"),
-        "errors": final_state.get("errors") or [],
-        "finished_at": datetime.now().isoformat(timespec="seconds"),
-    }
+        finished = True
+        yield {
+            "type": "run_end",
+            "run_id": run_id,
+            "report": report,
+            "usage": usage,
+            "duration_ms": duration_ms,
+            "verdict": final_state.get("verdict"),
+            "proposal": final_state.get("proposal"),
+            "plan": build_plan(
+                final_state.get("proposal") or {}, ctx["price"].get("last_close")
+            ),
+            "consensus": final_state.get("consensus"),
+            "errors": final_state.get("errors") or [],
+            "finished_at": datetime.now().isoformat(timespec="seconds"),
+        }
+    finally:
+        # 客户端断开（GeneratorExit / CancelledError）时，图还在后台跑就会继续烧
+        # token，账本也会永远停在 running。这里兜底取消并落一条 cancelled。
+        if not finished:
+            if not task.done():
+                task.cancel()
+            if persist and run_id:
+                try:
+                    await asyncio.to_thread(
+                        agent_store.finish_run,
+                        run_id,
+                        "cancelled",
+                        error="客户端断开，已取消",
+                        usage=client.usage.as_dict(),
+                        duration_ms=int((time.perf_counter() - started) * 1000),
+                    )
+                except Exception:  # noqa: BLE001 - 断开时尽力记录
+                    pass
 
 
 async def run_research(symbol: str, rounds: Optional[int] = None) -> dict[str, Any]:

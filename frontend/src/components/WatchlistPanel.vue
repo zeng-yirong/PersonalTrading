@@ -20,6 +20,7 @@ const query = ref('')
 const results = ref<SearchResult[]>([])
 const searching = ref(false)
 let timer: ReturnType<typeof setTimeout> | null = null
+let searchToken = 0
 
 function onInput() {
   if (timer) clearTimeout(timer)
@@ -32,13 +33,16 @@ function onInput() {
 }
 
 async function runSearch(value: string) {
+  const current = ++searchToken
   searching.value = true
   try {
-    results.value = await api.search(value)
+    const found = await api.search(value)
+    if (current !== searchToken) return
+    results.value = found
   } catch {
-    results.value = []
+    if (current === searchToken) results.value = []
   } finally {
-    searching.value = false
+    if (current === searchToken) searching.value = false
   }
 }
 

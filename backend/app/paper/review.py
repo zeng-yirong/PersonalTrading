@@ -92,76 +92,99 @@ def _judge(stance: str, ret20: Optional[float]) -> str:
 
 
 def refresh(limit: int = 200) -> dict[str, Any]:
-    """Recompute T+5/T+20 outcomes for every recorded run."""
+    """Recompute T+5/T+20 outcomes for every recorded run.
+
+    Prices are computed first and written in one short transaction: holding the
+    SQLite write lock while opening hundreds of DuckDB sessions made concurrent
+    writers fail with ``database is locked``.
+    """
     runs = _runs_with_context(limit)
     days = store.get_trade_days()
     index_of = {day: index for index, day in enumerate(days)}
     stamped = now_iso()
-    written = 0
     skipped = 0
+    rows: list[tuple[Any, ...]] = []
+    price_cache: dict[tuple[str, date], Optional[float]] = {}
+    bench_cache: dict[date, Optional[float]] = {}
 
-    with connection() as conn:
-        for run in runs:
-            as_of = run.get("as_of")
-            if not as_of:
-                skipped += 1
-                continue
-            entry_date = date.fromisoformat(as_of)
-            entry_price = _close_on(run["symbol"], entry_date)
-            if entry_price is None:
-                skipped += 1
-                continue
-            base_index = index_of.get(entry_date)
-            if base_index is None:
-                skipped += 1
-                continue
-            benchmark_entry = _benchmark_on(entry_date)
+    def close_on(symbol: str, day: date) -> Optional[float]:
+        key = (symbol, day)
+        if key not in price_cache:
+            price_cache[key] = _close_on(symbol, day)
+        return price_cache[key]
 
-            verdict = run["verdict"] or {}
-            decision = verdict.get("decision")
-            position_pct = verdict.get("final_position_pct")
-            stance = _classify(decision, position_pct)
+    def bench_on(day: date) -> Optional[float]:
+        if day not in bench_cache:
+            bench_cache[day] = _benchmark_on(day)
+        return bench_cache[day]
 
-            values: dict[str, Any] = {}
-            for horizon in HORIZONS:
-                target_index = base_index + horizon
-                if target_index >= len(days):
-                    values[f"d{horizon}_date"] = None
-                    values[f"d{horizon}_return"] = None
-                    values[f"d{horizon}_excess"] = None
-                    continue
-                target_date = days[target_index]
-                price = _close_on(run["symbol"], target_date)
-                if price is None:
-                    values[f"d{horizon}_date"] = target_date.isoformat()
-                    values[f"d{horizon}_return"] = None
-                    values[f"d{horizon}_excess"] = None
-                    continue
-                ret = (price / entry_price - 1) * 100
-                benchmark_now = _benchmark_on(target_date)
-                excess = None
-                if benchmark_entry and benchmark_now:
-                    excess = ret - (benchmark_now / benchmark_entry - 1) * 100
+    for run in runs:
+        as_of = run.get("as_of")
+        if not as_of:
+            skipped += 1
+            continue
+        entry_date = date.fromisoformat(as_of)
+        entry_price = close_on(run["symbol"], entry_date)
+        if entry_price is None:
+            skipped += 1
+            continue
+        base_index = index_of.get(entry_date)
+        if base_index is None:
+            skipped += 1
+            continue
+        benchmark_entry = bench_on(entry_date)
+
+        verdict = run["verdict"] or {}
+        decision = verdict.get("decision")
+        position_pct = verdict.get("final_position_pct")
+        stance = _classify(decision, position_pct)
+
+        values: dict[str, Any] = {}
+        for horizon in HORIZONS:
+            target_index = base_index + horizon
+            if target_index >= len(days):
+                values[f"d{horizon}_date"] = None
+                values[f"d{horizon}_return"] = None
+                values[f"d{horizon}_excess"] = None
+                continue
+            target_date = days[target_index]
+            price = close_on(run["symbol"], target_date)
+            if price is None:
                 values[f"d{horizon}_date"] = target_date.isoformat()
-                values[f"d{horizon}_return"] = round(ret, 4)
-                values[f"d{horizon}_excess"] = round(excess, 4) if excess is not None else None
+                values[f"d{horizon}_return"] = None
+                values[f"d{horizon}_excess"] = None
+                continue
+            ret = (price / entry_price - 1) * 100
+            benchmark_now = bench_on(target_date)
+            excess = None
+            if benchmark_entry and benchmark_now:
+                excess = ret - (benchmark_now / benchmark_entry - 1) * 100
+            values[f"d{horizon}_date"] = target_date.isoformat()
+            values[f"d{horizon}_return"] = round(ret, 4)
+            values[f"d{horizon}_excess"] = round(excess, 4) if excess is not None else None
 
-            conn.execute(
+        rows.append(
+            (
+                run["run_id"], run["symbol"], run["name"], decision, position_pct,
+                verdict.get("confidence"), entry_date.isoformat(), round(entry_price, 4),
+                values.get("d5_date"), values.get("d5_return"), values.get("d5_excess"),
+                values.get("d20_date"), values.get("d20_return"), values.get("d20_excess"),
+                f"{stance}/{_judge(stance, values.get('d20_return'))}",
+                stamped,
+            )
+        )
+
+    written = 0
+    if rows:
+        with connection() as conn:
+            conn.executemany(
                 "INSERT OR REPLACE INTO agent_reviews("
                 "run_id, symbol, name, action, position_pct, conviction, entry_date, entry_price, "
                 "d5_date, d5_return, d5_excess, d20_date, d20_return, d20_excess, outcome, updated_at"
                 ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    run["run_id"], run["symbol"], run["name"], decision, position_pct,
-                    verdict.get("confidence"), entry_date.isoformat(), round(entry_price, 4),
-                    values.get("d5_date"), values.get("d5_return"), values.get("d5_excess"),
-                    values.get("d20_date"), values.get("d20_return"), values.get("d20_excess"),
-                    f"{stance}/{_judge(stance, values.get('d20_return'))}",
-                    stamped,
-                ),
+                rows,
             )
-            written += 1
-
+        written = len(rows)
     return {"runs": len(runs), "written": written, "skipped": skipped}
 
 
