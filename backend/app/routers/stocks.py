@@ -10,6 +10,36 @@ from app.services.symbols import normalize_code, search_stocks
 router = APIRouter(prefix="/api", tags=["stocks"])
 
 
+@router.get("/stocks/{symbol}/detail")
+async def detail(symbol: str):
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services import detail as detail_service
+
+    code = normalize_code(symbol)
+    if not code:
+        raise HTTPException(status_code=400, detail="股票代码无效")
+    payload = await run_in_threadpool(detail_service.detail, code)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"没有 {code} 这只股票")
+    return payload
+
+
+@router.get("/stocks/{symbol}/intraday")
+async def intraday(symbol: str):
+    from starlette.concurrency import run_in_threadpool
+
+    from app.data import intraday as intraday_module
+
+    code = normalize_code(symbol)
+    if not code:
+        raise HTTPException(status_code=400, detail="股票代码无效")
+    payload = await run_in_threadpool(intraday_module.fetch, code)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="没有取到分时数据")
+    return payload
+
+
 @router.get("/search")
 async def search(q: str = Query(..., min_length=1), limit: int = Query(8, ge=1, le=20)):
     return await search_stocks(q, limit=limit)

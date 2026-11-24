@@ -22,6 +22,13 @@ CREATE TABLE IF NOT EXISTS watchlist (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS intraday_cache (
+    symbol TEXT PRIMARY KEY,
+    trade_date TEXT,
+    fetched_at TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS kline (
     symbol TEXT NOT NULL,
     period TEXT NOT NULL,

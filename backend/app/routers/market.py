@@ -68,6 +68,15 @@ async def status() -> dict:
     }
 
 
+@router.get("/overview")
+async def overview() -> dict:
+    """Today's market: indices, breadth, sectors, money flow, hot stocks."""
+    from app.market import overview as overview_module
+
+    await _require_panel()
+    return await run_in_threadpool(overview_module.overview)
+
+
 @router.get("/calendar")
 async def calendar(
     start: Optional[str] = Query(None, description="YYYY-MM-DD"),
