@@ -85,6 +85,17 @@ DATASETS: tuple[DatasetSpec, ...] = (
         start_year=2015,
     ),
     DatasetSpec(
+        name="moneyflow_hsgt",
+        api="moneyflow_hsgt",
+        label="沪深港通资金",
+        mode="date",
+        daily=True,
+        priority=21,
+        start_year=2015,
+        keys=("trade_date",),
+        note="北向/南向每日净买入，单位万元；大盘「主力/北向」卡片用",
+    ),
+    DatasetSpec(
         name="stk_limit",
         api="stk_limit",
         label="涨跌停价",

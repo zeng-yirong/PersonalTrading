@@ -208,6 +208,45 @@ def overview() -> dict[str, Any]:
             {"name": row[0], "net": float(row[1] or 0)} for row in money_flow
         ] if money_date is not None else []
 
+        north_date = None
+        north: dict[str, Any] = {"date": None, "net": None, "hgt": None, "sgt": None}
+        rows = _optional(conn, "SELECT MAX(trade_date) FROM moneyflow_hsgt", [])
+        north_date = rows[0][0] if rows else None
+        if north_date is not None:
+            found = _optional(
+                conn,
+                "SELECT CAST(north_money AS DOUBLE), CAST(hgt AS DOUBLE), CAST(sgt AS DOUBLE) "
+                "FROM moneyflow_hsgt WHERE trade_date = ?",
+                [north_date],
+            )
+            if found:
+                north = {
+                    "date": north_date,
+                    "net": float(found[0][0] or 0),
+                    "hgt": float(found[0][1] or 0),
+                    "sgt": float(found[0][2] or 0),
+                }
+
+        margin_rows = _optional(
+            conn,
+            "SELECT trade_date, SUM(CAST(rzye AS DOUBLE)) FROM margin_detail "
+            "WHERE trade_date <= ? GROUP BY 1 ORDER BY 1 DESC LIMIT 6",
+            [latest],
+        )
+        margin: dict[str, Any] = {"date": None, "balance": None, "change_5d_pct": None}
+        if margin_rows:
+            latest_margin = margin_rows[0]
+            base = margin_rows[5] if len(margin_rows) > 5 else None
+            margin = {
+                "date": latest_margin[0],
+                "balance": float(latest_margin[1] or 0),
+                "change_5d_pct": round(
+                    (float(latest_margin[1] or 0) / float(base[1]) - 1) * 100, 2
+                )
+                if base and base[1]
+                else None,
+            }
+
         hot_date = None
         hot: list[dict[str, Any]] = []
         rows = _optional(conn, "SELECT MAX(trade_date) FROM ths_hot", [])
@@ -247,6 +286,8 @@ def overview() -> dict[str, Any]:
         "breadth": breadth,
         "limit": limit,
         "money": {"net_mf_amount": net_mf, "date": money_date},
+        "north": north,
+        "margin": margin,
         "sectors": sectors,
         "distribution": distribution,
         "money_by_industry": {

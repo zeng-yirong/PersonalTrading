@@ -106,6 +106,13 @@ export interface MarketLimit {
   seal_rate?: number | null
 }
 
+export interface MarketNorth {
+  date: string | null
+  net: number | null
+  hgt: number | null
+  sgt: number | null
+}
+
 export interface MarketMoney {
   net_mf_amount: number | null
   date: string | null
@@ -164,6 +171,7 @@ export interface MarketOverview {
   breadth?: MarketBreadthMap
   limit?: MarketLimit
   money?: MarketMoney
+  north?: MarketNorth
   sectors?: MarketSectors
   distribution?: MarketDistributionBucket[]
   money_by_industry?: MarketIndustryMoney

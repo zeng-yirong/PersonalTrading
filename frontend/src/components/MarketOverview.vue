@@ -51,6 +51,7 @@ const sectorBucket = computed(() => {
 })
 const distribution = computed(() => props.data?.distribution ?? [])
 const stream = computed(() => props.data?.money_by_industry ?? null)
+const north = computed(() => props.data?.north ?? null)
 
 function distWidth(value: number): string {
   const rows = distribution.value
@@ -335,25 +336,36 @@ function breadthWidth(value: number): string {
 
       <div class="panel market-card span-2">
         <div class="market-card-head">
-          <h3>主力净流入</h3>
+          <h3>资金：主力 / 北向</h3>
           <span class="market-card-note">
             {{ money?.date || '—' }}
             <em v-if="stale(money?.date)" class="stale-flag">滞后</em>
           </span>
         </div>
-        <div class="market-big" :class="tone(money?.net_mf_amount)">
-          {{
-            money?.net_mf_amount === null || money?.net_mf_amount === undefined
-              ? '—'
-              : yi(money?.net_mf_amount, 'wan')
-          }}
-        </div>
-        <div class="market-card-note">
-          {{
-            money?.net_mf_amount === null || money?.net_mf_amount === undefined
-              ? '资金流数据缺失'
-              : '全市场当日主力资金净额'
-          }}
+        <div class="money-rows">
+          <div class="money-row">
+            <span class="money-label">主力净流入</span>
+            <strong :class="tone(money?.net_mf_amount)">
+              {{
+                money?.net_mf_amount === null || money?.net_mf_amount === undefined
+                  ? '—'
+                  : yi(money?.net_mf_amount, 'wan')
+              }}
+            </strong>
+            <em>全市场当日</em>
+          </div>
+          <div class="money-row">
+            <span class="money-label">北向净流入</span>
+            <strong :class="tone(north?.net)">
+              {{ north?.net === null || north?.net === undefined ? '未披露' : yi(north.net, 'wan') }}
+            </strong>
+            <em>
+              <template v-if="north?.hgt !== null && north?.hgt !== undefined">
+                沪股通 {{ yi(north.hgt, 'wan') }} · 深股通 {{ yi(north.sgt, 'wan') }}
+              </template>
+              <template v-else>沪深港通</template>
+            </em>
+          </div>
         </div>
       </div>
 

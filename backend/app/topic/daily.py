@@ -33,8 +33,9 @@ SYSTEM = """你是 A 股的个人研究员，写一份「今日市场复盘」�
 - data_gaps: ["数据缺口，没有就写空数组"]
 规则：
 1. 阶段判断要结合「情绪分数 + 今日变动 + 5 日变动」，不能只看一天。
-1b. 指数涨跌幅（indices）、涨跌分布（distribution）、行业资金（industry_money）都在数据里，
-   禁止写成「缺少指数数据」；只有北向资金确实没有，可以列入 data_gaps。
+1b. 指数涨跌幅（indices）、涨跌分布（distribution）、行业资金（industry_money）、
+   北向资金（north，单位万元）、涨停梯队（limit_detail：首板/2板/3板+/炸板/封板率/最高连板）、
+   两融余额（margin）都在数据里，禁止把这些写成「数据缺失」。
 2. 板块只写我给的数据里出现的行业名，不准自己编行业。
 3. 不要写买卖建议，不要给点位。
 只输出 JSON，不要 markdown 代码块。"""
@@ -75,6 +76,9 @@ def _prompt(sentiment: dict[str, Any], overview: dict[str, Any]) -> str:
         "indices": overview.get("indices") or [],
         "distribution": overview.get("distribution") or [],
         "industry_money": overview.get("money_by_industry") or {},
+        "north": overview.get("north") or {},
+        "limit_detail": overview.get("limit") or {},
+        "margin": overview.get("margin") or {},
         "score": sentiment.get("score"),
         "prev_score": sentiment.get("prev_score"),
         "change": sentiment.get("change"),
