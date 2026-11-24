@@ -192,6 +192,18 @@ function startResearch() {
   })
 }
 
+function onAgentSelect(payload: StockRef) {
+  const target = bareSymbol(payload.symbol)
+  if (!target) return
+  currentSymbol.value = target
+  currentName.value = payload.name || watchlistName(target)
+  detailSymbol.value = null
+  section.value = 'agent'
+  void nextTick(() => {
+    contentScroll.value?.scrollTo({ top: 0 })
+  })
+}
+
 function navigate(next: SectionKey) {
   section.value = next
   detailSymbol.value = null
@@ -420,6 +432,7 @@ onBeforeUnmount(() => {
               :loading="researchLoading"
               :error="notesError"
               @generate="generateResearch"
+              @select="onAgentSelect"
             />
             <OpsPanel v-else />
           </KeepAlive>

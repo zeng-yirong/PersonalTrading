@@ -34,6 +34,19 @@ const items = computed<NavItem[]>(() => [
     badge: props.watchCount,
   },
   {
+    key: 'agent',
+    label: '推演',
+    icon: [
+      'M12 3l1.9 4.6 4.6 1.9-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z',
+      'M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z',
+    ],
+  },
+  {
+    key: 'topic',
+    label: '主题',
+    icon: ['M12 3l9 5-9 5-9-5 9-5z', 'M3 13l9 5 9-5'],
+  },
+  {
     key: 'screen',
     label: '选股',
     icon: ['M4 5h16', 'M7 10h10', 'M10 15h4', 'M12 19v.01'],
@@ -44,22 +57,9 @@ const items = computed<NavItem[]>(() => [
     icon: ['M4 18l5-6 4 3 6-9', 'M15 6h4v4'],
   },
   {
-    key: 'topic',
-    label: '主题',
-    icon: ['M12 3l9 5-9 5-9-5 9-5z', 'M3 13l9 5 9-5'],
-  },
-  {
     key: 'factor',
     label: '因子',
     icon: ['M4 4h6v6H4z', 'M14 4h6v6h-6z', 'M4 14h6v6H4z', 'M14 14h6v6h-6z'],
-  },
-  {
-    key: 'agent',
-    label: '推演',
-    icon: [
-      'M12 3l1.9 4.6 4.6 1.9-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z',
-      'M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z',
-    ],
   },
   {
     key: 'ops',

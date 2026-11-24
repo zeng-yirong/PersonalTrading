@@ -3,6 +3,7 @@ import * as echarts from 'echarts'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
 import type {
+  OpsChain,
   OpsEntry,
   OpsFingerprint,
   OpsHealth,
@@ -101,6 +102,24 @@ function messageOf(exc: unknown) {
 function int(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
   return value.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+}
+
+const chain = ref<OpsChain | null>(null)
+const chainBusy = ref(false)
+const chainError = ref('')
+
+async function openChain(entry: OpsEntry) {
+  const runId = entry.source_run_id ?? (entry.kind === '推演' ? entry.id : null)
+  if (runId === null || runId === undefined || chainBusy.value) return
+  chainBusy.value = true
+  chainError.value = ''
+  try {
+    chain.value = await api.opsChain(runId)
+  } catch (exc) {
+    chainError.value = exc instanceof Error ? exc.message : String(exc)
+  } finally {
+    chainBusy.value = false
+  }
 }
 
 function scoreText(value: number | null): string {
@@ -468,6 +487,7 @@ onBeforeUnmount(() => {
                 </th>
                 <th>复盘</th>
                 <th>tokens</th>
+                <th>链</th>
               </tr>
             </thead>
             <tbody>
@@ -487,6 +507,19 @@ onBeforeUnmount(() => {
                   {{ entry.review || '—' }}
                 </td>
                 <td class="mono">{{ int(entry.tokens) }}</td>
+                <td>
+                  <button
+                    v-if="entry.source_run_id !== null && entry.source_run_id !== undefined"
+                    type="button"
+                    class="btn ghost ops-chain-btn"
+                    :disabled="chainBusy"
+                    title="查看这条记录的来龙去脉"
+                    @click="openChain(entry)"
+                  >
+                    #{{ entry.source_run_id }}
+                  </button>
+                  <span v-else class="muted">—</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -497,6 +530,44 @@ onBeforeUnmount(() => {
               ? '该类型暂无记录。'
               : '账本还没有记录：运行一次推演、主题研究或回测后，这里会出现一条可复盘的结论。'
           }}
+        </div>
+
+        <div v-if="chainError" class="error-bar" style="margin-top: 10px">{{ chainError }}</div>
+        <div v-if="chain" class="panel ops-chain">
+          <div class="research-head" style="margin-bottom: 8px">
+            <h3 style="margin: 0">决策链 · 推演 #{{ chain.run.id }}</h3>
+            <button class="btn ghost" type="button" @click="chain = null">收起</button>
+          </div>
+          <div class="ops-chain-run">
+            <span><strong>{{ chain.run.name || chain.run.symbol }}</strong>（{{ chain.run.symbol }}）</span>
+            <span>裁定 {{ chain.run.decision || '—' }}｜仓位 {{ chain.run.final_position_pct ?? '—' }}%</span>
+            <span>tokens {{ int(chain.run.tokens) }}｜{{ shortTime(chain.run.started_at) }}</span>
+            <span v-if="chain.review?.outcome">复盘 {{ chain.review.outcome }}</span>
+          </div>
+          <div v-if="chain.backtests.length" class="ops-chain-block">
+            <div class="ops-chain-title">派生回测</div>
+            <div v-for="item in chain.backtests" :key="`bt-${item.id}`" class="ops-chain-row">
+              <span>#{{ item.id }} {{ item.title }}</span>
+              <span class="mono">收益 {{ item.total_return_pct ?? '—' }}%｜超额年化 {{ item.excess_cagr_pct ?? '—' }}%｜{{ item.periods ?? '—' }} 期</span>
+            </div>
+          </div>
+          <div v-if="chain.topics.length" class="ops-chain-block">
+            <div class="ops-chain-title">派生主题</div>
+            <div v-for="item in chain.topics" :key="`tp-${item.id}`" class="ops-chain-row">
+              <span>#{{ item.id }} {{ item.topic }}</span>
+              <span>{{ item.verdict }}｜信心 {{ item.confidence }}</span>
+            </div>
+          </div>
+          <div v-if="chain.trades.length" class="ops-chain-block">
+            <div class="ops-chain-title">派生成交</div>
+            <div v-for="item in chain.trades" :key="`tr-${item.id}`" class="ops-chain-row">
+              <span>#{{ item.id }} {{ item.side }} {{ item.symbol }}</span>
+              <span class="mono">{{ item.shares }} 股 @ {{ item.price }}（{{ item.trade_date }}）</span>
+            </div>
+          </div>
+          <div v-if="!chain.backtests.length && !chain.topics.length && !chain.trades.length" class="loading">
+            这条推演还没有派生动作（回测 / 主题 / 成交）。
+          </div>
         </div>
 
         <div v-if="entries.length" class="sub-meta" style="margin-top: 8px">

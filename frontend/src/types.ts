@@ -984,6 +984,60 @@ export interface OpsTokenTotals {
   total: number
 }
 
+export interface OpsChainRun {
+  id: number
+  symbol: string
+  name: string
+  status: string
+  model: string
+  started_at: string
+  finished_at: string | null
+  decision: string | null
+  final_position_pct: number | null
+  tokens: number
+}
+
+export interface OpsChainBacktest {
+  id: number
+  title: string
+  total_return_pct: number | null
+  excess_cagr_pct: number | null
+  max_drawdown_pct: number | null
+  periods: number | null
+  created_at: string
+}
+
+export interface OpsChainTopic {
+  id: number
+  topic: string
+  verdict: string
+  confidence: number
+  created_at: string
+}
+
+export interface OpsChainTrade {
+  id: number
+  symbol: string
+  side: string
+  shares: number
+  price: number
+  fee: number
+  amount: number
+  trade_date: string
+}
+
+export interface OpsChain {
+  run: OpsChainRun
+  review: {
+    outcome?: string
+    entry_price?: number
+    d20_return?: number | null
+  } | null
+  backtests: OpsChainBacktest[]
+  topics: OpsChainTopic[]
+  trades: OpsChainTrade[]
+}
+
 export interface OpsSummary {
   counts: OpsCounts
   reviews: OpsReviews

@@ -19,6 +19,7 @@ import type {
   OpsKind,
   OpsLedger,
   OpsReviewRefresh,
+  OpsChain,
   OpsReviews,
   OpsSummary,
   OpsUsage,
@@ -180,6 +181,8 @@ export const api = {
       `/ledger?limit=${limit}${kind ? `&kind=${encodeURIComponent(kind)}` : ''}`,
     ),
   opsSummary: () => request<OpsSummary>('/ledger/summary'),
+  opsChain: (runId: number) =>
+    request<OpsChain>(`/ledger/chain/${encodeURIComponent(String(runId))}`),
   opsReview: () => request<OpsReviews>('/ledger/review'),
   opsReviewRefresh: (limit = 200) =>
     request<OpsReviewRefresh>(`/ledger/review/refresh?limit=${limit}`, {
