@@ -3383,3 +3383,17 @@ details.note summary {
   border-bottom: 1px dashed var(--border);
   font-size: 13px;
 }
+
+/* ---------- section error boundary ---------- */
+.boundary-detail {
+  margin-top: 8px;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--panel-2, rgba(255, 255, 255, 0.04));
+  border-radius: 6px;
+  padding: 8px;
+  white-space: pre-wrap;
+}

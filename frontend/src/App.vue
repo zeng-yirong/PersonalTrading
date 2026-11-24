@@ -21,6 +21,7 @@ import FactorPanel from './components/FactorPanel.vue'
 import MarketOverviewPanel from './components/MarketOverview.vue'
 import OpsPanel from './components/OpsPanel.vue'
 import ScreenPanel from './components/ScreenPanel.vue'
+import SectionBoundary from './components/SectionBoundary.vue'
 import StockContextMenu from './components/StockContextMenu.vue'
 import StockDetail from './components/StockDetail.vue'
 import TopicPanel from './components/TopicPanel.vue'
@@ -390,7 +391,8 @@ onBeforeUnmount(() => {
         <div v-if="error" class="error-bar">{{ error }}</div>
 
         <div v-show="!detailSymbol" class="section-host">
-          <KeepAlive :max="8">
+          <SectionBoundary :section-key="section">
+            <KeepAlive :max="8">
             <MarketOverviewPanel
               v-if="section === 'market'"
               :data="overview"
@@ -435,7 +437,8 @@ onBeforeUnmount(() => {
               @select="onAgentSelect"
             />
             <OpsPanel v-else />
-          </KeepAlive>
+            </KeepAlive>
+          </SectionBoundary>
         </div>
 
         <StockDetail
