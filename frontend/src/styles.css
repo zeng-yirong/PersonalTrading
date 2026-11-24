@@ -3619,3 +3619,41 @@ details.note summary {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- daily review (yesterday's signals) ---------- */
+.brief-review {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 10px;
+}
+.brief-review-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 70px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.review-status {
+  text-align: center;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 11px;
+}
+.review-status.ok {
+  color: var(--down, #23c483);
+  border: 1px solid currentColor;
+}
+.review-status.bad {
+  color: var(--up, #ff5d5d);
+  border: 1px solid currentColor;
+}
+.review-status.muted {
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.review-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

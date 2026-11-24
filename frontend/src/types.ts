@@ -870,6 +870,29 @@ export interface TopicTodayHistoryItem {
   created_at: string
 }
 
+export interface DailySignalReview {
+  signal: string
+  metric?: string
+  op?: string
+  value?: number | null
+  actual: number | null
+  status: '兑现' | '落空' | '未触发' | '无法判定'
+}
+
+export interface DailyReview {
+  as_of: string
+  evaluated_as_of: string | null
+  signals: DailySignalReview[]
+  hits?: number
+  total?: number
+  status: '已判定' | '待验证'
+}
+
+export interface DailyReviewPayload {
+  reviews: DailyReview[]
+  accuracy: { hits: number; total: number; rate: number | null }
+}
+
 export interface TopicToday {
   report: TopicReportDetail | null
   cached: boolean
@@ -877,6 +900,7 @@ export interface TopicToday {
   stale: boolean
   sentiment?: TopicSentiment | null
   history?: TopicTodayHistoryItem[]
+  review?: DailyReviewPayload
 }
 
 export interface TopicReportSummary {

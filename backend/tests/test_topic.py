@@ -368,7 +368,10 @@ DAILY_REPLY = {
         "avoid": ["不抄跌停板"],
     },
     "yesterday": "无",
-    "watching": ["次日涨停回到 66 家以上", "成交额维持 16678 亿元以上"],
+    "watching": [
+        {"metric": "limit_up", "op": ">=", "value": 66, "text": "次日涨停回到 66 家以上"},
+        {"metric": "amount_yi", "op": ">=", "value": 16678, "text": "成交额维持 16678 亿元以上"},
+    ],
     "risks": ["量能不足"],
     "data_gaps": [],
 }
@@ -422,3 +425,25 @@ def test_daily_today_http_contract(panel, monkeypatch):
     assert created["cached"] is False
     again = client.get("/api/topics/today").json()
     assert again["cached"] is True and again["report"]["id"] == created["report"]["id"]
+
+def test_judge_signal_statuses():
+    from app.topic import daily
+
+    metrics = {"limit_up": 55.0, "amount_yi": 16000.0}
+    judged = daily.judge(
+        [
+            {"metric": "limit_up", "op": ">=", "value": 50, "text": "涨停≥50"},
+            {"metric": "limit_up", "op": "<=", "value": 50, "text": "涨停≤50"},
+            {"metric": "score", "op": ">=", "value": 20, "text": "分数缺失"},
+            "旧格式观察",
+        ],
+        metrics,
+    )
+    assert [item["status"] for item in judged] == ["兑现", "落空", "未触发", "无法判定"]
+
+
+def test_daily_review_empty_history(panel):
+    result = service.daily_review(5)
+    assert result["reviews"] == []
+    assert result["accuracy"]["total"] == 0
+    assert result["accuracy"]["rate"] is None

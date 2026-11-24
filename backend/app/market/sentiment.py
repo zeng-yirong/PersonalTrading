@@ -88,14 +88,15 @@ def _limits(conn, start: date, end: date) -> dict[date, dict[str, int]]:
         """
         SELECT trade_date,
                COUNT(*) FILTER (WHERE "limit" = 'U'),
-               COUNT(*) FILTER (WHERE "limit" = 'D')
+               COUNT(*) FILTER (WHERE "limit" = 'D'),
+               COUNT(*) FILTER (WHERE "limit" = 'Z')
         FROM limit_list_d WHERE trade_date BETWEEN ? AND ? GROUP BY 1 ORDER BY 1
         """,
         [start, end],
     ).fetchall()
     return {
-        day: {"limit_up": int(up or 0), "limit_down": int(down or 0)}
-        for day, up, down in rows
+        day: {"limit_up": int(up or 0), "limit_down": int(down or 0), "broken": int(broken or 0)}
+        for day, up, down, broken in rows
     }
 
 
@@ -238,3 +239,54 @@ def series(days: int = SERIES_DAYS, force: bool = False) -> dict[str, Any]:
     value = _series_uncached(days)
     _CACHE.update({"value": value, "ts": now})
     return value
+
+SIGNAL_METRICS = {
+    "score": "情绪分数",
+    "up_ratio": "上涨占比%",
+    "above_ma20_ratio": "站上20日线%",
+    "limit_up": "涨停家数",
+    "limit_down": "跌停家数",
+    "seal_rate": "封板率%",
+    "amount_yi": "成交额(亿)",
+    "amount_ratio": "成交额/20日均量",
+    "sector_up_ratio": "行业上涨占比%",
+    "north_net": "北向净流入(万元)",
+}
+
+
+def metrics_on(day) -> dict[str, float]:
+    """One trading day's signal metrics, used to judge yesterday's watching list."""
+    with store.session(read_only=True) as conn:
+        start = day - timedelta(days=90)
+        breadth = _breadth(conn, start, day)
+        limits = _limits(conn, start, day)
+        amounts = _amount(conn, start, day)
+        sectors = _sectors(conn, start, day)
+        north_rows = conn.execute(
+            "SELECT CAST(north_money AS DOUBLE) FROM moneyflow_hsgt WHERE trade_date = ?",
+            [day],
+        ).fetchall()
+
+    row = {**breadth.get(day, {}), **limits.get(day, {}), **sectors.get(day, {})}
+    dates = sorted(value for value in amounts if value <= day)
+    total = float(amounts.get(day) or 0)
+    window = [float(amounts[d] or 0) for d in dates[-20:]]
+    average = sum(window) / len(window) if window else 0.0
+    row["amount_yi"] = round(total / 1e8, 1)
+    row["amount_ratio"] = round(total / average, 2) if average else None
+
+    up = int(row.get("limit_up") or 0)
+    broken = int(row.get("broken") or 0)
+    metrics = {
+        "score": _score(row),
+        "up_ratio": row.get("up_ratio"),
+        "above_ma20_ratio": row.get("above_ma20_ratio"),
+        "limit_up": float(up),
+        "limit_down": float(row.get("limit_down") or 0),
+        "seal_rate": round(up / (up + broken) * 100, 1) if up + broken else None,
+        "amount_yi": row["amount_yi"],
+        "amount_ratio": row["amount_ratio"],
+        "sector_up_ratio": row.get("sector_up_ratio"),
+        "north_net": float(north_rows[0][0]) if north_rows and north_rows[0][0] is not None else None,
+    }
+    return {key: (float(value) if value is not None else None) for key, value in metrics.items()}

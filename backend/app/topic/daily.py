@@ -22,6 +22,7 @@ from typing import Any, Optional
 
 from app.agents.llm import ChatClient
 from app.market import overview as market_overview
+from app.market.sentiment import SIGNAL_METRICS
 
 STAGES = ("冰点", "修复", "中性", "扩散", "偏热", "亢奋", "退潮")
 STANCES = ("进攻", "均衡", "防守")
@@ -51,7 +52,10 @@ SYSTEM = """你是 A 股的个人研究员，为个人交易账户写「今日�
 - sectors: {"leaders":[{"name","pct","note"}], "laggards":[...], "diffusion":"引用行业上涨占比", "concentration":"引用集中度", "continuity":"昨日领涨今天是否延续"}
 - action: {"position_range":"例如 0-2 成", "buy":["什么条件下买什么方向"], "sell":["什么条件下减仓/止盈"], "avoid":["今天不要做什么"]}
 - yesterday: "昨日判断对照：昨天说 X，今天 Y；没有上一份就写「无」"
-- watching: ["条件式观察，必须含数字阈值，至少 2 条"]
+- watching: [{"metric":"指标","op":">=|<=|value":"阈值(数字)","text":"一句话"}]
+   指标只能取：score(情绪分) up_ratio(上涨占比%) above_ma20_ratio(站上20日线%) limit_up(涨停家数)
+   limit_down(跌停家数) seal_rate(封板率%) amount_yi(成交额亿) amount_ratio(成交额/20日均量)
+   sector_up_ratio(行业上涨占比%) north_net(北向净流入万元)；至少 2 条
 - risks: ["2-3 条风险"]
 - data_gaps: ["数据缺口，没有就写空数组"]
 规则：
@@ -237,9 +241,20 @@ def _problems(payload: dict[str, Any], previous: Optional[dict[str, Any]]) -> li
         issues.append("watching")
     else:
         for item in watching:
-            text = item if isinstance(item, str) else json.dumps(item, ensure_ascii=False)
-            if not re.search(r"\d", text):
+            if not isinstance(item, dict):
                 issues.append("watching")
+                break
+            if item.get("metric") not in SIGNAL_METRICS:
+                issues.append("watching.metric")
+                break
+            if item.get("op") not in {">=", "<="}:
+                issues.append("watching.op")
+                break
+            if _num(item.get("value")) is None:
+                issues.append("watching.value")
+                break
+            if not item.get("text"):
+                issues.append("watching.text")
                 break
 
     # 数字自检：summary / action / sectors 里引用的数字要在快照里找得到
@@ -284,6 +299,45 @@ def _default_action(stage: str, score: float) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------- render
+def _watch_text(items: Any) -> list[str]:
+    output = []
+    for item in items or []:
+        if isinstance(item, dict):
+            text = item.get("text") or f"{SIGNAL_METRICS.get(item.get('metric'), item.get('metric'))} {item.get('op')} {item.get('value')}"
+            output.append(f"{text}（{item.get('metric')} {item.get('op')} {item.get('value')}）")
+        else:
+            output.append(str(item))
+    return output
+
+
+def judge(signals: Any, metrics: dict[str, Any]) -> list[dict[str, Any]]:
+    """Judge yesterday's watching list against today's metrics (no model)."""
+    output = []
+    for item in signals or []:
+        if not isinstance(item, dict):
+            output.append({"signal": str(item), "status": "无法判定", "actual": None})
+            continue
+        metric = item.get("metric")
+        target = _num(item.get("value"))
+        actual = metrics.get(metric) if metric else None
+        if target is None or actual is None:
+            status = "无法判定" if metric not in SIGNAL_METRICS else "未触发"
+        else:
+            ok = actual >= target if item.get("op") == ">=" else actual <= target
+            status = "兑现" if ok else "落空"
+        output.append(
+            {
+                "signal": item.get("text") or f"{metric} {item.get('op')} {target}",
+                "metric": metric,
+                "op": item.get("op"),
+                "value": target,
+                "actual": round(float(actual), 2) if actual is not None else None,
+                "status": status,
+            }
+        )
+    return output
+
+
 def render(report: dict[str, Any], sentiment: dict[str, Any]) -> str:
     components = sentiment.get("components") or {}
     action = report.get("action") or {}
@@ -343,7 +397,7 @@ def render(report: dict[str, Any], sentiment: dict[str, Any]) -> str:
         str(report.get("yesterday") or "无"),
         "",
         "## 明日观察（条件式）",
-        *_li(report.get("watching")),
+        *_li(_watch_text(report.get("watching"))),
         "",
         "## 风险",
         *_li(report.get("risks")),
@@ -409,8 +463,18 @@ def fallback(
         "action": action,
         "yesterday": "无（规则版未做昨日对照）",
         "watching": [
-            f"次日涨停家数能否回到 {int((limit.get('up') or 0) * 1.2)} 家以上",
-            f"成交额能否维持在 {_fmt(components.get('amount_yi'), 0)} 亿元以上",
+            {
+                "metric": "limit_up",
+                "op": ">=",
+                "value": round(float(limit.get("up") or 0) * 1.2, 1),
+                "text": f"涨停家数回到 {int((limit.get('up') or 0) * 1.2)} 家以上",
+            },
+            {
+                "metric": "amount_yi",
+                "op": ">=",
+                "value": round(float(components.get("amount_yi") or 0) * 0.9, 1),
+                "text": f"成交额维持在 {_fmt(components.get('amount_yi'), 0)} 亿元附近",
+            },
         ],
         "risks": ["规则版摘要不含模型判断，需人工复核。"],
         "data_gaps": [],

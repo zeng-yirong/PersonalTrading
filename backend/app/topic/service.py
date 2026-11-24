@@ -194,6 +194,67 @@ def _previous_brief(as_of: Any) -> Any:
     return None
 
 
+def daily_review(limit: int = 8) -> dict[str, Any]:
+    """Judge each past brief's watching list against the next trading day."""
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in store.list_for_topic(DAILY_TOPIC, max(limit * 3, 12)):
+        day = str(item.get("as_of"))
+        if day in seen:
+            continue
+        seen.add(day)
+        rows.append(item)
+        if len(rows) >= limit:
+            break
+
+    days = market_store.get_trade_days()
+    index = {day.isoformat(): position for position, day in enumerate(days)}
+    with market_store.session(read_only=True) as conn:
+        latest_row = conn.execute("SELECT MAX(trade_date) FROM daily").fetchone()
+    latest = latest_row[0] if latest_row and latest_row[0] else None
+    reviews: list[dict[str, Any]] = []
+    hits = total = 0
+    for item in rows:
+        detail = store.get(item["id"]) or {}
+        payload = detail.get("report") or {}
+        signals = payload.get("watching") or []
+        position = index.get(str(item.get("as_of")))
+        next_day = days[position + 1] if position is not None and position + 1 < len(days) else None
+        if next_day is None or (latest is not None and next_day > latest):
+            reviews.append(
+                {
+                    "as_of": str(item.get("as_of")),
+                    "evaluated_as_of": None,
+                    "signals": [],
+                    "status": "待验证",
+                }
+            )
+            continue
+        judged = daily.judge(signals, sentiment_series.metrics_on(next_day))
+        judged_count = sum(1 for entry in judged if entry["status"] in {"兑现", "落空"})
+        good = sum(1 for entry in judged if entry["status"] == "兑现")
+        hits += good
+        total += judged_count
+        reviews.append(
+            {
+                "as_of": str(item.get("as_of")),
+                "evaluated_as_of": next_day.isoformat(),
+                "signals": judged,
+                "hits": good,
+                "total": judged_count,
+                "status": "已判定",
+            }
+        )
+    return {
+        "reviews": reviews,
+        "accuracy": {
+            "hits": hits,
+            "total": total,
+            "rate": round(hits / total * 100, 1) if total else None,
+        },
+    }
+
+
 def daily_history(limit: int = 8) -> list[dict[str, Any]]:
     """One row per trading day (同一交易日多次重新生成时只留最新一份)。"""
     seen: set[str] = set()

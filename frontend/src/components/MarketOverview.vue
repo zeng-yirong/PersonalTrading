@@ -52,6 +52,12 @@ const sectorBucket = computed(() => {
 const distribution = computed(() => props.data?.distribution ?? [])
 const stream = computed(() => props.data?.money_by_industry ?? null)
 const north = computed(() => props.data?.north ?? null)
+const reviewData = computed(() => today.value?.review ?? null)
+const latestReview = computed(() => {
+  const rows = reviewData.value?.reviews ?? []
+  return rows.find((row) => row.status === '已判定') ?? rows[0] ?? null
+})
+const accuracy = computed(() => reviewData.value?.accuracy ?? null)
 
 function distWidth(value: number): string {
   const rows = distribution.value
@@ -524,6 +530,21 @@ function breadthWidth(value: number): string {
               <span>成交额</span>
               <strong>{{ ((sentiment.components.amount_yi ?? 0) / 10000).toFixed(2) }} 万亿</strong>
               <em>{{ sentiment.components.amount_ratio ?? '—' }}× 20日均量</em>
+            </div>
+          </div>
+
+          <div v-if="latestReview" class="brief-review">
+            <div class="market-card-note">
+              昨日观察对照（{{ latestReview.as_of }} → {{ latestReview.evaluated_as_of || '待次日收盘' }}）
+              <template v-if="accuracy && accuracy.total">｜近 {{ accuracy.total }} 条命中 {{ accuracy.hits }} 条（{{ accuracy.rate }}%）</template>
+            </div>
+            <div v-if="!latestReview.signals.length" class="market-brief-wait">
+              还没有可判定的昨日观察，等下一交易日收盘后自动对照。
+            </div>
+            <div v-for="(sig, index) in latestReview.signals" :key="`sig-${index}`" class="brief-review-row">
+              <span class="review-status" :class="sig.status === '兑现' ? 'ok' : sig.status === '落空' ? 'bad' : 'muted'">{{ sig.status }}</span>
+              <span class="review-text">{{ sig.signal }}</span>
+              <span class="mono">{{ sig.actual ?? '—' }}</span>
             </div>
           </div>
 

@@ -46,6 +46,7 @@ async def today_cached() -> dict[str, Any]:
     payload = await run_in_threadpool(service.daily_cached)
     payload["sentiment"] = await run_in_threadpool(sentiment_series.series)
     payload["history"] = await run_in_threadpool(service.daily_history, 8)
+    payload["review"] = await run_in_threadpool(service.daily_review, 8)
     return payload
 
 
