@@ -43,8 +43,10 @@ const breadthTabs = computed(() => [
 const limit = computed<MarketLimit | null>(() => props.data?.limit ?? null)
 const money = computed<MarketMoney | null>(() => props.data?.money ?? null)
 const sectors = computed<MarketSectors | null>(() => props.data?.sectors ?? null)
-const hot = computed<MarketHotStock[]>(() => props.data?.hot ?? [])
+const hot = computed<MarketHotStock[]>(() => (props.data?.hot ?? []).slice(0, 8))
 const indices = computed(() => props.data?.indices ?? [])
+const sectorTop = computed(() => (sectors.value?.top ?? []).slice(0, 5))
+const sectorBottom = computed(() => (sectors.value?.bottom ?? []).slice(0, 5))
 
 const breadthTotal = computed(() => {
   const row = breadth.value
@@ -334,7 +336,7 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
 
       <div class="panel market-card span-2">
         <div class="market-card-head">
-          <h3>板块领涨 / 领跌</h3>
+          <h3>板块领涨 / 领跌（申万一级）</h3>
           <span class="market-card-note">
             {{ sectors?.date || '—' }}
             <em v-if="stale(sectors?.date)" class="stale-flag">滞后</em>
@@ -343,27 +345,27 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
         <div v-if="sectors" class="sector-columns">
           <div>
             <div class="sector-col-title"><span>领涨</span><span>涨跌幅 / 成交额</span></div>
-            <div v-for="(sector, i) in sectors.top" :key="`top-${i}`" class="sector-row">
+            <div v-for="(sector, i) in sectorTop" :key="`top-${i}`" class="sector-row">
               <span class="sector-name" :title="sector.name">{{ sector.name }}</span>
               <span class="sector-pct up">{{ pct(sector.pct_chg) }}</span>
               <span class="sector-amount">{{ yi(sector.amount, 'wan') }}</span>
             </div>
-            <div v-if="!sectors.top.length" class="loading">暂无领涨板块</div>
+            <div v-if="!sectorTop.length" class="loading">暂无领涨板块</div>
           </div>
           <div>
             <div class="sector-col-title"><span>领跌</span><span>涨跌幅 / 成交额</span></div>
-            <div v-for="(sector, i) in sectors.bottom" :key="`bottom-${i}`" class="sector-row">
+            <div v-for="(sector, i) in sectorBottom" :key="`bottom-${i}`" class="sector-row">
               <span class="sector-name" :title="sector.name">{{ sector.name }}</span>
               <span class="sector-pct down">{{ pct(sector.pct_chg) }}</span>
               <span class="sector-amount">{{ yi(sector.amount, 'wan') }}</span>
             </div>
-            <div v-if="!sectors.bottom.length" class="loading">暂无领跌板块</div>
+            <div v-if="!sectorBottom.length" class="loading">暂无领跌板块</div>
           </div>
         </div>
         <div v-else class="loading">暂无板块数据</div>
       </div>
 
-      <div class="panel market-card span-2 market-brief">
+      <div class="panel market-card span-4 market-brief">
         <div class="market-card-head">
           <h3>今日复盘 · 情绪 / 阶段 / 板块</h3>
           <span v-if="today?.report" class="market-card-note">

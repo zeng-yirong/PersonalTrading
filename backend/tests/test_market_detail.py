@@ -94,9 +94,11 @@ def panel(tmp_path, monkeypatch):
           {"ts_code": "VARCHAR", "trade_date": "DATE", "name": "VARCHAR",
            "pct_change": "DOUBLE", "amount": "DOUBLE"},
           ("ts_code", "trade_date"),
-          [{"ts_code": f"8010{index:02d}.SI", "trade_date": days[-1], "name": name,
+          [{"ts_code": code, "trade_date": days[-1], "name": name,
             "pct_change": pct, "amount": 1e10}
-           for index, (name, pct) in enumerate(
+           for code, (name, pct) in zip(
+               ["801010.SI", "801030.SI", "801040.SI", "801050.SI",
+                "801080.SI", "801110.SI", "801120.SI", "801130.SI"],
                [("农林牧渔", 2.5), ("电子", 1.8), ("计算机", 1.2), ("电力设备", 0.6),
                 ("食品饮料", 0.2), ("医药生物", -0.5), ("煤炭", -1.2), ("银行", -2.0)])])
     table("ths_hot",

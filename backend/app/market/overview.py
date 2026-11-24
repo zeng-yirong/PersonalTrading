@@ -111,9 +111,12 @@ def overview() -> dict[str, Any]:
         sector_date = rows[0][0] if rows else None
         sectors: dict[str, Any] = {"top": [], "bottom": [], "date": sector_date}
         if sector_date is not None:
+            # 只要申万一级行业（31 个）：三级行业（如「印刷包装机械」）与同花顺的
+            # 「行业板块」不是一个口径，细到三级也会让人误以为板块方向很明确。
             rows = conn.execute(
                 "SELECT name, pct_change, amount FROM sw_daily "
                 "WHERE trade_date = ? AND pct_change IS NOT NULL AND amount > 0 "
+                "  AND ts_code LIKE '801%0.SI' AND name NOT LIKE '申万%' "
                 "ORDER BY pct_change DESC",
                 [sector_date],
             ).fetchall()
@@ -123,6 +126,7 @@ def overview() -> dict[str, Any]:
             ]
             sectors["top"] = clean[:6]
             sectors["bottom"] = list(reversed(clean[-6:])) if len(clean) > 6 else []
+            sectors["industries"] = len(clean)
 
         hot_date = None
         hot: list[dict[str, Any]] = []

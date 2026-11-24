@@ -3483,3 +3483,17 @@ details.note summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---------- market layout tweaks ---------- */
+.market-card.span-4 {
+  grid-column: span 4;
+}
+.market-brief-body {
+  max-height: min(900px, 78vh);
+}
+.sector-row {
+  padding: 4px;
+}
+.hot-row {
+  padding: 4px 6px;
+}
