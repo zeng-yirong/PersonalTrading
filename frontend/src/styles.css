@@ -3497,3 +3497,55 @@ details.note summary {
 .hot-row {
   padding: 4px 6px;
 }
+
+/* ---------- limit ladder ---------- */
+.ladder-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.ladder-big {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.ladder-big strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.ladder-big span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.ladder-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+.ladder-row {
+  display: grid;
+  grid-template-columns: 46px 1fr 36px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.ladder-label {
+  color: var(--muted);
+}
+.ladder-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--panel-2, rgba(255, 255, 255, 0.06));
+  overflow: hidden;
+}
+.ladder-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--up, #ff5d5d);
+}
+.ladder-value {
+  text-align: right;
+}

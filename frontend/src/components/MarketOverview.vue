@@ -6,7 +6,6 @@ import { api } from '../api'
 import type {
   MarketBreadth,
   MarketBreadthMap,
-  MarketHotStock,
   MarketLimit,
   MarketMoney,
   MarketOverview,
@@ -43,10 +42,15 @@ const breadthTabs = computed(() => [
 const limit = computed<MarketLimit | null>(() => props.data?.limit ?? null)
 const money = computed<MarketMoney | null>(() => props.data?.money ?? null)
 const sectors = computed<MarketSectors | null>(() => props.data?.sectors ?? null)
-const hot = computed<MarketHotStock[]>(() => (props.data?.hot ?? []).slice(0, 8))
 const indices = computed(() => props.data?.indices ?? [])
-const sectorTop = computed(() => (sectors.value?.top ?? []).slice(0, 5))
-const sectorBottom = computed(() => (sectors.value?.bottom ?? []).slice(0, 5))
+const sectorLevel = ref<'1' | '2'>('1')
+const sectorBucket = computed(() => {
+  const row = sectors.value
+  if (!row) return null
+  return (sectorLevel.value === '2' ? row.level2 : row.level1) ?? null
+})
+const sectorTop = computed(() => (sectorBucket.value?.top ?? sectors.value?.top ?? []).slice(0, 5))
+const sectorBottom = computed(() => (sectorBucket.value?.bottom ?? sectors.value?.bottom ?? []).slice(0, 5))
 
 const breadthTotal = computed(() => {
   const row = breadth.value
@@ -135,6 +139,13 @@ function renderBrief(markdown: string): string {
   return DOMPurify.sanitize(marked.parse(markdown) as string)
 }
 
+function ladderWidth(value: number | undefined, total: number | undefined): string {
+  const part = Number(value ?? 0)
+  const whole = Number(total ?? 0)
+  if (!whole) return '0%'
+  return `${Math.max(4, Math.min(100, (part / whole) * 100))}%`
+}
+
 onMounted(() => {
   void loadToday()
 })
@@ -175,28 +186,6 @@ function breadthWidth(value: number): string {
   return `${(value / breadthTotal.value) * 100}%`
 }
 
-function hotSymbol(item: MarketHotStock): string | null {
-  const match = /^(\d{6})\.(SH|SZ|BJ)$/.exec(item.code)
-  if (match) return match[1]
-  return /^\d{6}$/.test(item.code) ? item.code : null
-}
-
-function openHot(item: MarketHotStock) {
-  const symbol = hotSymbol(item)
-  if (!symbol) return
-  emit('select', { symbol, name: item.name })
-}
-
-function openContext(item: MarketHotStock, event: MouseEvent) {
-  const symbol = hotSymbol(item)
-  if (!symbol) return
-  emit('context', {
-    symbol,
-    name: item.name,
-    x: event.clientX,
-    y: event.clientY,
-  })
-}
 </script>
 
 <template>
@@ -336,9 +325,27 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
 
       <div class="panel market-card span-2">
         <div class="market-card-head">
-          <h3>板块领涨 / 领跌（申万一级）</h3>
+          <h3>板块领涨 / 领跌</h3>
+          <div class="market-tabs">
+            <button
+              type="button"
+              class="market-tab"
+              :class="{ active: sectorLevel === '1' }"
+              @click="sectorLevel = '1'"
+            >
+              申万一级
+            </button>
+            <button
+              type="button"
+              class="market-tab"
+              :class="{ active: sectorLevel === '2' }"
+              @click="sectorLevel = '2'"
+            >
+              二级
+            </button>
+          </div>
           <span class="market-card-note">
-            {{ sectors?.date || '—' }}
+            {{ sectors?.date || '—' }} · {{ sectorBucket?.industries ?? sectors?.industries ?? '—' }} 个
             <em v-if="stale(sectors?.date)" class="stale-flag">滞后</em>
           </span>
         </div>
@@ -455,35 +462,48 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
         </template>
       </div>
 
-      <div class="panel market-card span-2">
+      <div class="panel market-card span-2 limit-ladder">
         <div class="market-card-head">
-          <h3>热门股</h3>
+          <h3>涨停梯队 / 封板</h3>
           <span class="market-card-note">
-            {{ data.hot_date || '—' }}
-            <em v-if="stale(data.hot_date)" class="stale-flag">滞后</em>
-            <span v-if="hot.length"> · 点击详情 · 右键更多</span>
+            {{ limit?.date || '—' }}
+            <em v-if="stale(limit?.date)" class="stale-flag">滞后</em>
           </span>
         </div>
-        <div class="hot-list">
-          <button
-            v-for="(item, i) in hot"
-            :key="`${item.code}-${i}`"
-            type="button"
-            class="hot-row"
-            :disabled="!hotSymbol(item)"
-            :title="hotSymbol(item) ? `${item.name} ${item.code}` : '非 A 股标的，暂不支持详情'"
-            @click="openHot(item)"
-            @contextmenu.prevent="openContext(item, $event)"
-          >
-            <span class="hot-rank">{{ item.rank }}</span>
-            <span class="hot-name">
-              <strong>{{ item.name }}</strong>
-              <span class="mono">{{ item.code }}</span>
-            </span>
-            <span class="hot-pct" :class="tone(item.pct_chg)">{{ pct(item.pct_chg) }}</span>
-            <span class="hot-tag">{{ hotSymbol(item) ? 'A股' : '非A股' }}</span>
-          </button>
-          <div v-if="!hot.length" class="loading">暂无热门股数据</div>
+        <div class="ladder-top">
+          <div class="ladder-big">
+            <strong class="up">{{ limit?.up ?? 0 }}</strong>
+            <span>涨停</span>
+            <strong class="down">{{ limit?.down ?? 0 }}</strong>
+            <span>跌停</span>
+          </div>
+          <div class="ladder-big">
+            <strong>{{ limit?.broken ?? 0 }}</strong>
+            <span>炸板</span>
+            <strong>{{ limit?.seal_rate ?? '—' }}%</strong>
+            <span>封板率</span>
+          </div>
+        </div>
+        <div class="ladder-bars">
+          <div class="ladder-row">
+            <span class="ladder-label">首板</span>
+            <span class="ladder-bar"><i :style="{ width: ladderWidth(limit?.first, limit?.up) }"></i></span>
+            <span class="ladder-value mono">{{ limit?.first ?? 0 }}</span>
+          </div>
+          <div class="ladder-row">
+            <span class="ladder-label">2 板</span>
+            <span class="ladder-bar"><i :style="{ width: ladderWidth(limit?.second, limit?.up) }"></i></span>
+            <span class="ladder-value mono">{{ limit?.second ?? 0 }}</span>
+          </div>
+          <div class="ladder-row">
+            <span class="ladder-label">3 板+</span>
+            <span class="ladder-bar"><i :style="{ width: ladderWidth(limit?.third, limit?.up) }"></i></span>
+            <span class="ladder-value mono">{{ limit?.third ?? 0 }}</span>
+          </div>
+        </div>
+        <div class="market-card-note">
+          最高连板 {{ limit?.height ?? '—' }} 板 ·
+          封板率 = 涨停 /（涨停 + 炸板），越高说明情绪越稳
         </div>
       </div>
     </div>

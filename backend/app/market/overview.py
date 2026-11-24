@@ -85,7 +85,7 @@ def overview() -> dict[str, Any]:
 
         rows = _optional(conn, "SELECT MAX(trade_date) FROM limit_list_d", [])
         limit_date = rows[0][0] if rows else None
-        limit = {"up": 0, "down": 0, "date": limit_date}
+        limit: dict[str, Any] = {"up": 0, "down": 0, "date": limit_date}
         if limit_date is not None:
             rows = conn.execute(
                 'SELECT "limit", COUNT(*) FROM limit_list_d WHERE trade_date = ? GROUP BY 1',
@@ -96,6 +96,31 @@ def overview() -> dict[str, Any]:
                     limit["up"] = int(count)
                 elif code == "D":
                     limit["down"] = int(count)
+            ladder = _optional(conn,
+                """
+                SELECT COUNT(*) FILTER (WHERE "limit" = 'U' AND COALESCE(limit_times, 1) = 1),
+                       COUNT(*) FILTER (WHERE "limit" = 'U' AND limit_times = 2),
+                       COUNT(*) FILTER (WHERE "limit" = 'U' AND limit_times >= 3),
+                       MAX(limit_times) FILTER (WHERE "limit" = 'U'),
+                       COUNT(*) FILTER (WHERE "limit" = 'Z')
+                FROM limit_list_d WHERE trade_date = ?
+                """,
+                [limit_date],
+            )
+            ladder = ladder[0] if ladder else (0, 0, 0, 0, 0)
+            first, second, third, height, broken = (int(v or 0) for v in ladder)
+            limit.update(
+                {
+                    "first": first,
+                    "second": second,
+                    "third": third,
+                    "height": height,
+                    "broken": broken,
+                    "seal_rate": round(limit["up"] / (limit["up"] + broken) * 100, 1)
+                    if limit["up"] + broken
+                    else None,
+                }
+            )
 
         rows = _optional(conn, "SELECT MAX(trade_date) FROM moneyflow", [])
         money_date = rows[0][0] if rows else None
@@ -111,22 +136,38 @@ def overview() -> dict[str, Any]:
         sector_date = rows[0][0] if rows else None
         sectors: dict[str, Any] = {"top": [], "bottom": [], "date": sector_date}
         if sector_date is not None:
-            # 只要申万一级行业（31 个）：三级行业（如「印刷包装机械」）与同花顺的
-            # 「行业板块」不是一个口径，细到三级也会让人误以为板块方向很明确。
-            rows = conn.execute(
-                "SELECT name, pct_change, amount FROM sw_daily "
+            # 申万一级（801xxx0，31 个）与二级（801xxx 非 0，约 150 个）分开返回；
+            # 三级（85xxxx）与同花顺「行业板块」口径差太远，不展示。
+            rows = _optional(conn,
+                "SELECT ts_code, name, pct_change, amount FROM sw_daily "
                 "WHERE trade_date = ? AND pct_change IS NOT NULL AND amount > 0 "
-                "  AND ts_code LIKE '801%0.SI' AND name NOT LIKE '申万%' "
+                "  AND ts_code LIKE '801%.SI' AND name NOT LIKE '申万%' "
                 "ORDER BY pct_change DESC",
                 [sector_date],
-            ).fetchall()
-            clean = [
-                {"name": row[0], "pct_chg": float(row[1]), "amount": float(row[2] or 0)}
-                for row in rows
-            ]
-            sectors["top"] = clean[:6]
-            sectors["bottom"] = list(reversed(clean[-6:])) if len(clean) > 6 else []
-            sectors["industries"] = len(clean)
+            )
+
+            def _bucket(items):
+                clean = [
+                    {"name": row[1], "pct_chg": float(row[2]), "amount": float(row[3] or 0)}
+                    for row in items
+                ]
+                return {
+                    "top": clean[:6],
+                    "bottom": list(reversed(clean[-6:])) if len(clean) > 6 else [],
+                    "industries": len(clean),
+                }
+
+            level1 = [row for row in rows if row[0].endswith("0.SI")]
+            level2 = [row for row in rows if not row[0].endswith("0.SI")]
+            sectors = {
+                "date": sector_date,
+                "level1": _bucket(level1),
+                "level2": _bucket(level2),
+                # 默认口径仍是一级，前端切换时用上面两块
+                "top": _bucket(level1)["top"],
+                "bottom": _bucket(level1)["bottom"],
+                "industries": len(level1),
+            }
 
         hot_date = None
         hot: list[dict[str, Any]] = []

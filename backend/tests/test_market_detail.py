@@ -153,7 +153,9 @@ def test_overview_shape(panel):
     assert payload["indices"][0]["label"] == "沪深300"
     assert payload["breadth"]["stock"]["up"] == 2
     assert payload["breadth"]["hk"] is None
-    assert payload["limit"] == {"up": 1, "down": 1, "date": panel[-1]}
+    assert payload["limit"]["up"] == 1
+    assert payload["limit"]["down"] == 1
+    assert payload["limit"]["date"] == panel[-1]
     assert payload["money"]["net_mf_amount"] == pytest.approx(1234.5)
     assert payload["sectors"]["top"][0]["name"] == "农林牧渔"
     assert payload["sectors"]["bottom"][0]["name"] == "银行"

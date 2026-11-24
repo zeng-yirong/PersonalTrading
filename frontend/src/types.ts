@@ -98,6 +98,12 @@ export interface MarketLimit {
   up: number
   down: number
   date: string | null
+  first?: number
+  second?: number
+  third?: number
+  height?: number
+  broken?: number
+  seal_rate?: number | null
 }
 
 export interface MarketMoney {
@@ -111,10 +117,19 @@ export interface MarketSector {
   amount: number
 }
 
+export interface MarketSectorBucket {
+  top: MarketSector[]
+  bottom: MarketSector[]
+  industries: number
+}
+
 export interface MarketSectors {
   top: MarketSector[]
   bottom: MarketSector[]
   date: string | null
+  industries?: number
+  level1?: MarketSectorBucket
+  level2?: MarketSectorBucket
 }
 
 export interface MarketHotStock {
