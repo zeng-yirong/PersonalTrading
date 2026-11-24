@@ -3549,3 +3549,43 @@ details.note summary {
 .ladder-value {
   text-align: right;
 }
+
+/* ---------- distribution bars ---------- */
+.dist-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.dist-row {
+  display: grid;
+  grid-template-columns: 62px 1fr 52px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.dist-label {
+  color: var(--muted);
+}
+.dist-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--panel-2, rgba(255, 255, 255, 0.06));
+  overflow: hidden;
+}
+.dist-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+.dist-bar i.up {
+  background: var(--up, #ff5d5d);
+}
+.dist-bar i.down {
+  background: var(--down, #23c483);
+}
+.dist-bar i.flat {
+  background: var(--muted, #8b9cb0);
+}
+.dist-value {
+  text-align: right;
+}

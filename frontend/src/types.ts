@@ -141,6 +141,22 @@ export interface MarketHotStock {
 }
 
 /** ``GET /api/market/overview``；数据空库时后端只返回 as_of + empty。 */
+export interface MarketDistributionBucket {
+  label: string
+  count: number
+}
+
+export interface MarketIndustryFlow {
+  name: string
+  net: number
+}
+
+export interface MarketIndustryMoney {
+  date: string | null
+  top: MarketIndustryFlow[]
+  bottom: MarketIndustryFlow[]
+}
+
 export interface MarketOverview {
   as_of: string | null
   prev_date?: string | null
@@ -149,6 +165,8 @@ export interface MarketOverview {
   limit?: MarketLimit
   money?: MarketMoney
   sectors?: MarketSectors
+  distribution?: MarketDistributionBucket[]
+  money_by_industry?: MarketIndustryMoney
   hot?: MarketHotStock[]
   hot_date?: string | null
   empty?: boolean

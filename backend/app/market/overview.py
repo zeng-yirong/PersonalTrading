@@ -169,6 +169,45 @@ def overview() -> dict[str, Any]:
                 "industries": len(level1),
             }
 
+        distribution = _optional(
+            conn,
+            """
+            SELECT COUNT(*) FILTER (WHERE pct >= 0.05),
+                   COUNT(*) FILTER (WHERE pct >= 0.02 AND pct < 0.05),
+                   COUNT(*) FILTER (WHERE pct > 0 AND pct < 0.02),
+                   COUNT(*) FILTER (WHERE pct = 0),
+                   COUNT(*) FILTER (WHERE pct < 0 AND pct > -0.02),
+                   COUNT(*) FILTER (WHERE pct <= -0.02 AND pct > -0.05),
+                   COUNT(*) FILTER (WHERE pct <= -0.05)
+            FROM (
+                SELECT d.close / NULLIF(d.pre_close, 0) - 1 AS pct
+                FROM daily d JOIN symbols s ON s.symbol = d.symbol
+                WHERE s.asset_type = 'stock' AND d.trade_date = ?
+            )
+            """,
+            [latest],
+        )
+        buckets = ("涨≥5%", "涨2~5%", "涨0~2%", "平盘", "跌0~2%", "跌2~5%", "跌≥5%")
+        raw_dist = distribution[0] if distribution else (0,) * len(buckets)
+        distribution = [
+            {"label": label, "count": int((raw_dist[index] if index < len(raw_dist) else 0) or 0)}
+            for index, label in enumerate(buckets)
+        ]
+
+        money_flow = _optional(
+            conn,
+            """
+            SELECT s.industry, SUM(m.net_mf_amount) AS net
+            FROM moneyflow m JOIN symbols s ON s.symbol = split_part(m.ts_code, '.', 1)
+            WHERE m.trade_date = ? AND s.industry IS NOT NULL AND s.industry <> ''
+            GROUP BY 1 ORDER BY net DESC
+            """,
+            [money_date],
+        )
+        flow_rows = [
+            {"name": row[0], "net": float(row[1] or 0)} for row in money_flow
+        ] if money_date is not None else []
+
         hot_date = None
         hot: list[dict[str, Any]] = []
         rows = _optional(conn, "SELECT MAX(trade_date) FROM ths_hot", [])
@@ -209,6 +248,12 @@ def overview() -> dict[str, Any]:
         "limit": limit,
         "money": {"net_mf_amount": net_mf, "date": money_date},
         "sectors": sectors,
+        "distribution": distribution,
+        "money_by_industry": {
+            "date": money_date,
+            "top": flow_rows[:5],
+            "bottom": list(reversed(flow_rows[-5:])) if len(flow_rows) > 5 else [],
+        },
         "hot": hot,
         "hot_date": hot_date.isoformat() if hot_date else None,
     }

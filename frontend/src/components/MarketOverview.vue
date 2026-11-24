@@ -49,6 +49,15 @@ const sectorBucket = computed(() => {
   if (!row) return null
   return (sectorLevel.value === '2' ? row.level2 : row.level1) ?? null
 })
+const distribution = computed(() => props.data?.distribution ?? [])
+const stream = computed(() => props.data?.money_by_industry ?? null)
+
+function distWidth(value: number): string {
+  const rows = distribution.value
+  const max = Math.max(1, ...rows.map((row) => row.count))
+  return `${Math.max(2, (value / max) * 100)}%`
+}
+
 const sectorTop = computed(() => (sectorBucket.value?.top ?? sectors.value?.top ?? []).slice(0, 5))
 const sectorBottom = computed(() => (sectorBucket.value?.bottom ?? sectors.value?.bottom ?? []).slice(0, 5))
 
@@ -280,26 +289,51 @@ function breadthWidth(value: number): string {
         </div>
       </div>
 
-      <div class="panel market-card">
+      <div class="panel market-card span-2">
         <div class="market-card-head">
-          <h3>涨停 / 跌停</h3>
-          <span class="market-card-note">
-            {{ limit?.date || '—' }}
-            <em v-if="stale(limit?.date)" class="stale-flag">滞后</em>
-          </span>
+          <h3>涨跌分布</h3>
+          <span class="market-card-note">{{ data.as_of || '—' }}</span>
         </div>
-        <div class="market-big">
-          <span class="up">{{ limit?.up ?? 0 }}</span>
-          <small>涨停</small>
-          <span class="down" style="margin-left: 12px">{{ limit?.down ?? 0 }}</span>
-          <small>跌停</small>
-        </div>
-        <div class="market-card-note">
-          {{ limit?.date ? `数据日 ${limit.date}` : '暂无涨跌停数据' }}
+        <div class="dist-bars">
+          <div v-for="(item, index) in distribution" :key="item.label" class="dist-row">
+            <span class="dist-label">{{ item.label }}</span>
+            <span class="dist-bar">
+              <i :class="index < 3 ? 'up' : index === 3 ? 'flat' : 'down'" :style="{ width: distWidth(item.count) }"></i>
+            </span>
+            <span class="dist-value mono">{{ item.count }}</span>
+          </div>
         </div>
       </div>
 
-      <div class="panel market-card">
+      <div class="panel market-card span-2">
+        <div class="market-card-head">
+          <h3>行业资金流向（细分）</h3>
+          <span class="market-card-note">
+            {{ stream?.date || '—' }}
+            <em v-if="stale(stream?.date)" class="stale-flag">滞后</em>
+          </span>
+        </div>
+        <div class="sector-columns">
+          <div>
+            <div class="sector-col-title"><span>净流入</span><span>金额</span></div>
+            <div v-for="(row, i) in stream?.top ?? []" :key="`in-${i}`" class="sector-row">
+              <span class="sector-name" :title="row.name">{{ row.name }}</span>
+              <span class="sector-pct up">{{ yi(row.net, 'wan') }}</span>
+            </div>
+            <div v-if="!stream?.top?.length" class="loading">暂无数据</div>
+          </div>
+          <div>
+            <div class="sector-col-title"><span>净流出</span><span>金额</span></div>
+            <div v-for="(row, i) in stream?.bottom ?? []" :key="`out-${i}`" class="sector-row">
+              <span class="sector-name" :title="row.name">{{ row.name }}</span>
+              <span class="sector-pct down">{{ yi(row.net, 'wan') }}</span>
+            </div>
+            <div v-if="!stream?.bottom?.length" class="loading">暂无数据</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel market-card span-2">
         <div class="market-card-head">
           <h3>主力净流入</h3>
           <span class="market-card-note">
@@ -370,6 +404,51 @@ function breadthWidth(value: number): string {
           </div>
         </div>
         <div v-else class="loading">暂无板块数据</div>
+      </div>
+
+      <div class="panel market-card span-2 limit-ladder">
+        <div class="market-card-head">
+          <h3>涨停梯队 / 封板</h3>
+          <span class="market-card-note">
+            {{ limit?.date || '—' }}
+            <em v-if="stale(limit?.date)" class="stale-flag">滞后</em>
+          </span>
+        </div>
+        <div class="ladder-top">
+          <div class="ladder-big">
+            <strong class="up">{{ limit?.up ?? 0 }}</strong>
+            <span>涨停</span>
+            <strong class="down">{{ limit?.down ?? 0 }}</strong>
+            <span>跌停</span>
+          </div>
+          <div class="ladder-big">
+            <strong>{{ limit?.broken ?? 0 }}</strong>
+            <span>炸板</span>
+            <strong>{{ limit?.seal_rate ?? '—' }}%</strong>
+            <span>封板率</span>
+          </div>
+        </div>
+        <div class="ladder-bars">
+          <div class="ladder-row">
+            <span class="ladder-label">首板</span>
+            <span class="ladder-bar"><i :style="{ width: ladderWidth(limit?.first, limit?.up) }"></i></span>
+            <span class="ladder-value mono">{{ limit?.first ?? 0 }}</span>
+          </div>
+          <div class="ladder-row">
+            <span class="ladder-label">2 板</span>
+            <span class="ladder-bar"><i :style="{ width: ladderWidth(limit?.second, limit?.up) }"></i></span>
+            <span class="ladder-value mono">{{ limit?.second ?? 0 }}</span>
+          </div>
+          <div class="ladder-row">
+            <span class="ladder-label">3 板+</span>
+            <span class="ladder-bar"><i :style="{ width: ladderWidth(limit?.third, limit?.up) }"></i></span>
+            <span class="ladder-value mono">{{ limit?.third ?? 0 }}</span>
+          </div>
+        </div>
+        <div class="market-card-note">
+          最高连板 {{ limit?.height ?? '—' }} 板 ·
+          封板率 = 涨停 /（涨停 + 炸板），越高说明情绪越稳
+        </div>
       </div>
 
       <div class="panel market-card span-4 market-brief">
@@ -462,50 +541,7 @@ function breadthWidth(value: number): string {
         </template>
       </div>
 
-      <div class="panel market-card span-2 limit-ladder">
-        <div class="market-card-head">
-          <h3>涨停梯队 / 封板</h3>
-          <span class="market-card-note">
-            {{ limit?.date || '—' }}
-            <em v-if="stale(limit?.date)" class="stale-flag">滞后</em>
-          </span>
-        </div>
-        <div class="ladder-top">
-          <div class="ladder-big">
-            <strong class="up">{{ limit?.up ?? 0 }}</strong>
-            <span>涨停</span>
-            <strong class="down">{{ limit?.down ?? 0 }}</strong>
-            <span>跌停</span>
-          </div>
-          <div class="ladder-big">
-            <strong>{{ limit?.broken ?? 0 }}</strong>
-            <span>炸板</span>
-            <strong>{{ limit?.seal_rate ?? '—' }}%</strong>
-            <span>封板率</span>
-          </div>
-        </div>
-        <div class="ladder-bars">
-          <div class="ladder-row">
-            <span class="ladder-label">首板</span>
-            <span class="ladder-bar"><i :style="{ width: ladderWidth(limit?.first, limit?.up) }"></i></span>
-            <span class="ladder-value mono">{{ limit?.first ?? 0 }}</span>
-          </div>
-          <div class="ladder-row">
-            <span class="ladder-label">2 板</span>
-            <span class="ladder-bar"><i :style="{ width: ladderWidth(limit?.second, limit?.up) }"></i></span>
-            <span class="ladder-value mono">{{ limit?.second ?? 0 }}</span>
-          </div>
-          <div class="ladder-row">
-            <span class="ladder-label">3 板+</span>
-            <span class="ladder-bar"><i :style="{ width: ladderWidth(limit?.third, limit?.up) }"></i></span>
-            <span class="ladder-value mono">{{ limit?.third ?? 0 }}</span>
-          </div>
-        </div>
-        <div class="market-card-note">
-          最高连板 {{ limit?.height ?? '—' }} 板 ·
-          封板率 = 涨停 /（涨停 + 炸板），越高说明情绪越稳
-        </div>
-      </div>
+
     </div>
   </template>
 

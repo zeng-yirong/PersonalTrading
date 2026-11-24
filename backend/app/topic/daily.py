@@ -33,6 +33,8 @@ SYSTEM = """你是 A 股的个人研究员，写一份「今日市场复盘」�
 - data_gaps: ["数据缺口，没有就写空数组"]
 规则：
 1. 阶段判断要结合「情绪分数 + 今日变动 + 5 日变动」，不能只看一天。
+1b. 指数涨跌幅（indices）、涨跌分布（distribution）、行业资金（industry_money）都在数据里，
+   禁止写成「缺少指数数据」；只有北向资金确实没有，可以列入 data_gaps。
 2. 板块只写我给的数据里出现的行业名，不准自己编行业。
 3. 不要写买卖建议，不要给点位。
 只输出 JSON，不要 markdown 代码块。"""
@@ -54,7 +56,7 @@ def _digits(text: str) -> int:
     return sum(1 for char in text if char.isdigit())
 
 
-def _prompt(sentiment: dict[str, Any], sectors: dict[str, Any]) -> str:
+def _prompt(sentiment: dict[str, Any], overview: dict[str, Any]) -> str:
     components = sentiment.get("components") or {}
     points = sentiment.get("points") or []
     recent = [
@@ -70,6 +72,9 @@ def _prompt(sentiment: dict[str, Any], sectors: dict[str, Any]) -> str:
     ]
     payload = {
         "as_of": sentiment.get("as_of"),
+        "indices": overview.get("indices") or [],
+        "distribution": overview.get("distribution") or [],
+        "industry_money": overview.get("money_by_industry") or {},
         "score": sentiment.get("score"),
         "prev_score": sentiment.get("prev_score"),
         "change": sentiment.get("change"),
@@ -77,12 +82,12 @@ def _prompt(sentiment: dict[str, Any], sectors: dict[str, Any]) -> str:
         "rule_stage": sentiment.get("stage"),
         "components": components,
         "last_6_days": recent,
-        "sector_top": sectors.get("top") or [],
-        "sector_bottom": sectors.get("bottom") or [],
+        "sector_top": (overview.get("sectors") or {}).get("top") or [],
+        "sector_bottom": (overview.get("sectors") or {}).get("bottom") or [],
     }
     return (
         "数据如下（JSON）：\n"
-        + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        + json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
         + "\n\n请按规则输出 JSON。"
     )
 
@@ -219,8 +224,9 @@ async def generate(
     client: ChatClient, sentiment: dict[str, Any], model: str = ""
 ) -> dict[str, Any]:
     """Ask the model once (plus one repair); fall back to rules if it fails."""
-    sectors = market_overview.overview().get("sectors") or {}
-    user = _prompt(sentiment, sectors)
+    overview = market_overview.overview()
+    sectors = overview.get("sectors") or {}
+    user = _prompt(sentiment, overview)
     reply = await client.complete_json(SYSTEM, user, max_tokens=2600, temperature=0.2)
     problems = _problems(reply)
     if problems:
