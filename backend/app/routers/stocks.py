@@ -25,6 +25,25 @@ async def detail(symbol: str):
     return payload
 
 
+@router.get("/stocks/{symbol}/history")
+async def history(symbol: str, span: str = Query("1y", alias="range")):
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services import detail as detail_service
+
+    code = normalize_code(symbol)
+    if not code:
+        raise HTTPException(status_code=400, detail="股票代码无效")
+    if span not in detail_service.RANGES:
+        raise HTTPException(
+            status_code=400, detail=f"range 只能是 {'/'.join(detail_service.RANGES)}"
+        )
+    payload = await run_in_threadpool(detail_service.history, code, span)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"没有 {code} 这只股票")
+    return payload
+
+
 @router.get("/stocks/{symbol}/intraday")
 async def intraday(symbol: str):
     from starlette.concurrency import run_in_threadpool

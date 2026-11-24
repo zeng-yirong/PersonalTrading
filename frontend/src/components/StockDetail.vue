@@ -4,8 +4,10 @@ import { api } from '../api'
 import type {
   ChartData,
   IntradayData,
+  StockBar,
   StockDetailData,
   StockFinancial,
+  StockRange,
 } from '../types'
 import IntradayChart from './IntradayChart.vue'
 import PriceChart from './PriceChart.vue'
@@ -25,6 +27,14 @@ const emit = defineEmits<{
 
 type ChartTab = 'intraday' | 'day'
 
+const RANGES: { key: StockRange; label: string }[] = [
+  { key: '3m', label: '3月' },
+  { key: '6m', label: '6月' },
+  { key: '1y', label: '1年' },
+  { key: '3y', label: '3年' },
+  { key: 'all', label: '全部' },
+]
+
 interface FactorRow {
   k: string
   v: string
@@ -36,6 +46,9 @@ const intraday = ref<IntradayData | null>(null)
 const loading = ref(false)
 const error = ref('')
 const tab = ref<ChartTab>('intraday')
+const span = ref<StockRange>('1y')
+const historyBars = ref<StockBar[]>([])
+const historyLoading = ref(false)
 let token = 0
 
 function messageOf(exc: unknown): string {
@@ -109,7 +122,7 @@ const change = computed(() => {
 })
 
 const dayChart = computed<ChartData | null>(() => {
-  const rows = detail.value?.chart ?? []
+  const rows = historyBars.value.length ? historyBars.value : detail.value?.chart ?? []
   if (!rows.length) return null
   const closes = rows.map((row) => row.close)
   return {
@@ -210,18 +223,41 @@ const finRows = computed(() => {
 
 const runs = computed(() => detail.value?.runs ?? [])
 
+async function loadHistory() {
+  if (!props.symbol) return
+  historyLoading.value = true
+  try {
+    const payload = await api.stockHistory(props.symbol, span.value)
+    historyBars.value = payload.bars
+  } catch {
+    historyBars.value = []
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+watch(span, () => {
+  void loadHistory()
+})
+
+watch(tab, (value) => {
+  if (value === 'day' && !historyBars.value.length) void loadHistory()
+})
+
 async function load(symbol: string) {
   const current = ++token
   loading.value = true
   error.value = ''
   detail.value = null
   intraday.value = null
+  historyBars.value = []
   try {
     const data = await api.stockDetail(symbol)
     if (current !== token) return
     detail.value = data
     intraday.value = data.intraday
     loading.value = false
+    if (tab.value === 'day') void loadHistory()
     try {
       const minute = await api.stockIntraday(symbol)
       if (current === token && minute.points.length) intraday.value = minute
@@ -333,8 +369,26 @@ watch(
               <span v-if="intraday?.source"> · {{ intraday.source }}</span>
               <span v-if="intraday?.points.length"> · {{ intraday.points.length }} 个分钟点</span>
             </template>
-            <template v-else>近 {{ detail.chart.length }} 个交易日</template>
+            <template v-else>
+              <span>
+                共 {{ historyBars.length || detail.chart.length }} 个交易日
+                <template v-if="historyLoading"> · 读取中…</template>
+              </span>
+            </template>
           </div>
+        </div>
+        <div v-if="tab === 'day'" class="range-chips">
+          <button
+            v-for="range in RANGES"
+            :key="range.key"
+            type="button"
+            class="chip"
+            :class="{ active: span === range.key }"
+            :disabled="historyLoading"
+            @click="span = range.key"
+          >
+            {{ range.label }}
+          </button>
         </div>
         <div class="detail-chart-body">
           <IntradayChart

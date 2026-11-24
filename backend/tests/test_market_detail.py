@@ -96,7 +96,7 @@ def panel(tmp_path, monkeypatch):
            "ts_name": "VARCHAR", "rank": "INTEGER", "pct_change": "DOUBLE",
            "hot": "DOUBLE"},
           ("trade_date", "data_type", "ts_code"),
-          [{"trade_date": days[-1], "data_type": "hot", "ts_code": "600519.SH",
+          [{"trade_date": days[-1], "data_type": "热股", "ts_code": "600519.SH",
             "ts_name": "贵州茅台", "rank": 1, "pct_change": 1.5, "hot": 98888.0}])
     return days
 
@@ -105,7 +105,8 @@ def test_overview_shape(panel):
     payload = overview.overview()
     assert payload["as_of"] == panel[-1].isoformat()
     assert payload["indices"][0]["label"] == "沪深300"
-    assert payload["breadth"]["up"] == 2
+    assert payload["breadth"]["stock"]["up"] == 2
+    assert payload["breadth"]["hk"] is None
     assert payload["limit"] == {"up": 1, "down": 1, "date": panel[-1]}
     assert payload["money"]["net_mf_amount"] == pytest.approx(1234.5)
     assert payload["sectors"]["top"][0]["name"] == "农林牧渔"
@@ -148,6 +149,25 @@ def test_intraday_parse_and_cache(tmp_path, monkeypatch):
     assert [point["time"] for point in parsed["points"]] == ["09:31", "09:32"]
     assert parsed["points"][1]["price"] == pytest.approx(1442.0)
     assert parsed["pre_close"] == pytest.approx(1439.0)
+
+
+def test_history_spans(panel):
+    payload = detail_module.history("600519", "all")
+    assert payload["span"] == "all"
+    assert len(payload["bars"]) == 5
+    assert payload["bars"][-1]["date"] == panel[-1].isoformat()
+    assert detail_module.history("999999", "1y") is None
+
+
+def test_history_http_contract(panel):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    assert client.get("/api/stocks/600519/history?range=3m").status_code == 200
+    assert client.get("/api/stocks/600519/history?range=10y").status_code == 400
+    assert client.get("/api/stocks/999999/history").status_code == 404
 
 
 def test_detail_http_contract(panel, monkeypatch):

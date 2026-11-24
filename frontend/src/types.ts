@@ -79,11 +79,19 @@ export interface MarketIndex {
   amount: number
 }
 
+export type MarketBreadthKind = 'stock' | 'etf' | 'hk'
+
 export interface MarketBreadth {
   up: number
   down: number
   flat: number
   amount: number
+}
+
+export interface MarketBreadthMap {
+  stock?: MarketBreadth
+  etf?: MarketBreadth
+  hk?: MarketBreadth | null
 }
 
 export interface MarketLimit {
@@ -122,11 +130,12 @@ export interface MarketOverview {
   as_of: string | null
   prev_date?: string | null
   indices?: MarketIndex[]
-  breadth?: MarketBreadth
+  breadth?: MarketBreadthMap
   limit?: MarketLimit
   money?: MarketMoney
   sectors?: MarketSectors
   hot?: MarketHotStock[]
+  hot_date?: string | null
   empty?: boolean
 }
 
@@ -170,6 +179,15 @@ export interface StockBar {
   close: number
   volume: number
   c_adj: number
+}
+
+export type StockRange = '3m' | '6m' | '1y' | '3y' | 'all'
+
+export interface StockHistory {
+  symbol: string
+  name: string
+  span: StockRange
+  bars: StockBar[]
 }
 
 export interface StockFinancial {

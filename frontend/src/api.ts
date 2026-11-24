@@ -30,6 +30,8 @@ import type {
   ScreenResult,
   SearchResult,
   StockDetailData,
+  StockHistory,
+  StockRange,
   TopicContext,
   TopicMeta,
   TopicReport,
@@ -83,6 +85,10 @@ export const api = {
     request<StockDetailData>(`/stocks/${encodeURIComponent(symbol)}/detail`),
   stockIntraday: (symbol: string) =>
     request<IntradayData>(`/stocks/${encodeURIComponent(symbol)}/intraday`),
+  stockHistory: (symbol: string, range: StockRange) =>
+    request<StockHistory>(
+      `/stocks/${encodeURIComponent(symbol)}/history?range=${encodeURIComponent(range)}`,
+    ),
 
   research: (symbol: string) =>
     request<ResearchResponse>(`/stocks/${symbol}/research`, { method: 'POST', body: '{}' }),

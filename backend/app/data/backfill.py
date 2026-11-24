@@ -617,7 +617,11 @@ def update_today(
         raise BackfillError(f"Tushare 不可用：{reason}")
     store.init_schema()
 
-    specs = [spec for spec in specs_for() if spec.daily and spec.mode in {"date", "period"}]
+    specs = [
+        spec
+        for spec in specs_for()
+        if spec.daily and (spec.mode in {"date", "period"} or spec.daily_date)
+    ]
     results: list[dict[str, Any]] = []
     for spec in specs:
         started = datetime.now()

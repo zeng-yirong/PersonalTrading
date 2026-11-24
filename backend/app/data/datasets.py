@@ -31,6 +31,7 @@ class DatasetSpec:
     code_source: str = "stocks"   # stocks | funds | index | sw | global
     keys: tuple[str, ...] = ("ts_code", "trade_date")
     daily: bool = False       # included in the "update today" command
+    daily_date: bool = False  # code-mode spec the API can also serve by trade_date
     priority: int = 100       # lower runs first in a full backfill
     start_year: int = 2010    # earliest year worth backfilling
     note: str = ""
@@ -106,6 +107,7 @@ DATASETS: tuple[DatasetSpec, ...] = (
         api="limit_list_d",
         label="涨跌停统计",
         mode="date",
+        daily=True,
         priority=23,
         start_year=2018,
     ),
@@ -215,6 +217,8 @@ DATASETS: tuple[DatasetSpec, ...] = (
         label="申万行业指数",
         mode="code",
         code_source="sw",
+        daily=True,
+        daily_date=True,
         priority=62,
         start_year=2010,
     ),
@@ -365,6 +369,7 @@ DATASETS: tuple[DatasetSpec, ...] = (
         api="ths_hot",
         label="同花顺热榜",
         mode="date",
+        daily=True,
         priority=25,
         start_year=2025,
         keys=("trade_date", "ts_code", "data_type"),

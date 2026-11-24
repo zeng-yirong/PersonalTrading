@@ -3266,3 +3266,46 @@ details.note summary {
     height: 320px;
   }
 }
+/* ---------- market breadth tabs / stale badges ---------- */
+.market-tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 10px;
+}
+.market-tab {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.market-tab:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.market-tab.active {
+  background: var(--accent-tint, rgba(56, 189, 248, 0.16));
+  border-color: var(--accent);
+  color: var(--text);
+}
+.market-tab:disabled { opacity: 0.4; cursor: not-allowed; }
+.stale-flag {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--warn, #d97706);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: 6px;
+}
+
+/* ---------- stock detail range chips ---------- */
+.range-chips {
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 10px;
+}
+.range-chips .chip {
+  padding: 2px 10px;
+  font-size: 12px;
+}

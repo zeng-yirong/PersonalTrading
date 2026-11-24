@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Optional
 
 from app.data import store
+
+_A_SHARE = re.compile(r"^\d{6}\.(SH|SZ|BJ)$")
 
 INDICES = (
     ("000001.SH", "上证指数"),
@@ -58,14 +61,27 @@ def overview() -> dict[str, Any]:
                 }
             )
 
-        breadth = conn.execute(
-            "SELECT COUNT(*) FILTER (WHERE close > pre_close), "
-            "       COUNT(*) FILTER (WHERE close < pre_close), "
-            "       COUNT(*) FILTER (WHERE close = pre_close), "
-            "       COALESCE(SUM(amount), 0) "
-            "FROM daily WHERE trade_date = ?",
+        breadth_rows = _optional(
+            conn,
+            "SELECT s.asset_type, "
+            "       COUNT(*) FILTER (WHERE d.close > d.pre_close), "
+            "       COUNT(*) FILTER (WHERE d.close < d.pre_close), "
+            "       COUNT(*) FILTER (WHERE d.close = d.pre_close), "
+            "       COALESCE(SUM(d.amount), 0) "
+            "FROM daily d JOIN symbols s ON s.symbol = d.symbol "
+            "WHERE d.trade_date = ? GROUP BY 1",
             [latest],
-        ).fetchone()
+        )
+        breadth: dict[str, Any] = {}
+        for asset_type, up, down, flat, amount in breadth_rows:
+            breadth[str(asset_type)] = {
+                "up": int(up or 0),
+                "down": int(down or 0),
+                "flat": int(flat or 0),
+                "amount": float(amount or 0),
+            }
+        # 港股不在本地面板里（symbols 只有 stock/etf），显式给 null 而不是编一个数。
+        breadth.setdefault("hk", None)
 
         rows = _optional(conn, "SELECT MAX(trade_date) FROM limit_list_d", [])
         limit_date = rows[0][0] if rows else None
@@ -108,38 +124,46 @@ def overview() -> dict[str, Any]:
             sectors["top"] = clean[:6]
             sectors["bottom"] = list(reversed(clean[-6:])) if len(clean) > 6 else []
 
+        hot_date = None
+        hot: list[dict[str, Any]] = []
         rows = _optional(conn, "SELECT MAX(trade_date) FROM ths_hot", [])
         hot_date = rows[0][0] if rows else None
-        hot = []
         if hot_date is not None:
-            rows = conn.execute(
-                "SELECT ts_code, ts_name, rank, pct_change, hot FROM ths_hot "
-                "WHERE trade_date = ? ORDER BY rank ASC LIMIT 10",
+            rows = _optional(
+                conn,
+                "SELECT h.ts_code, COALESCE(s.name, h.ts_name), h.rank, h.pct_change, h.hot "
+                "FROM ths_hot h LEFT JOIN symbols s "
+                "  ON s.symbol = split_part(h.ts_code, '.', 1) "
+                "WHERE h.trade_date = ? AND h.data_type = '热股' "
+                "QUALIFY row_number() OVER (PARTITION BY h.ts_code ORDER BY h.rank) = 1 "
+                "ORDER BY h.rank ASC LIMIT 30",
                 [hot_date],
-            ).fetchall()
-            hot = [
-                {
-                    "code": row[0],
-                    "name": row[1],
-                    "rank": row[2],
-                    "pct_chg": float(row[3] or 0),
-                    "hot": float(row[4] or 0),
-                }
-                for row in rows
-            ]
+            )
+            for row in rows:
+                code = str(row[0] or "")
+                # 热榜混有港股/基金/期货代码，这里只保留 A 股，避免点进详情是空的。
+                if not _A_SHARE.match(code):
+                    continue
+                hot.append(
+                    {
+                        "code": code,
+                        "name": row[1],
+                        "rank": row[2],
+                        "pct_chg": float(row[3] or 0),
+                        "hot": float(row[4] or 0),
+                    }
+                )
+                if len(hot) >= 10:
+                    break
 
     return {
         "as_of": latest.isoformat() if latest else None,
         "prev_date": prev.isoformat() if prev else None,
         "indices": indices,
-        "breadth": {
-            "up": int(breadth[0] or 0),
-            "down": int(breadth[1] or 0),
-            "flat": int(breadth[2] or 0),
-            "amount": float(breadth[3] or 0),
-        },
+        "breadth": breadth,
         "limit": limit,
         "money": {"net_mf_amount": net_mf, "date": money_date},
         "sectors": sectors,
         "hot": hot,
+        "hot_date": hot_date.isoformat() if hot_date else None,
     }

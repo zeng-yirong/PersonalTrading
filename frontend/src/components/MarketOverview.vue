@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type {
   MarketBreadth,
+  MarketBreadthMap,
   MarketHotStock,
   MarketLimit,
   MarketMoney,
@@ -23,7 +24,17 @@ const emit = defineEmits<{
   (e: 'context', payload: StockContextPayload): void
 }>()
 
-const breadth = computed<MarketBreadth | null>(() => props.data?.breadth ?? null)
+const breadthKind = ref<'stock' | 'etf' | 'hk'>('stock')
+const breadthMap = computed<MarketBreadthMap>(() => props.data?.breadth ?? {})
+const breadth = computed<MarketBreadth | null>(() => {
+  const row = breadthMap.value[breadthKind.value]
+  return row ?? null
+})
+const breadthTabs = computed(() => [
+  { key: 'stock' as const, label: 'A股', row: breadthMap.value.stock ?? null },
+  { key: 'etf' as const, label: 'ETF', row: breadthMap.value.etf ?? null },
+  { key: 'hk' as const, label: '港股', row: breadthMap.value.hk ?? null },
+])
 const limit = computed<MarketLimit | null>(() => props.data?.limit ?? null)
 const money = computed<MarketMoney | null>(() => props.data?.money ?? null)
 const sectors = computed<MarketSectors | null>(() => props.data?.sectors ?? null)
@@ -35,6 +46,12 @@ const breadthTotal = computed(() => {
   if (!row) return 0
   return row.up + row.down + row.flat
 })
+
+/** 某块数据的日期早于面板数据日，就明确标「滞后」，而不是假装是今天。 */
+function stale(day: string | null | undefined): boolean {
+  const asOf = props.data?.as_of
+  return Boolean(day && asOf && day < asOf)
+}
 
 function num(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
@@ -135,29 +152,53 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
       <div class="panel market-card span-2">
         <div class="market-card-head">
           <h3>涨跌家数</h3>
-          <span class="market-card-note">数据日 {{ data.as_of || '—' }}</span>
+          <div class="market-tabs">
+            <button
+              v-for="tab in breadthTabs"
+              :key="tab.key"
+              type="button"
+              class="market-tab"
+              :class="{ active: breadthKind === tab.key }"
+              :disabled="!tab.row"
+              :title="tab.row ? `${tab.label} ${tab.row.up + tab.row.down + tab.row.flat} 只` : '本地面板未覆盖'"
+              @click="breadthKind = tab.key"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+          <span class="market-card-note">
+            数据日 {{ data.as_of || '—' }}
+          </span>
         </div>
-        <div class="market-big">
-          {{ breadthTotal.toLocaleString('zh-CN') }}
-          <small>只有交易</small>
-        </div>
-        <div v-if="breadth" class="breadth-track">
-          <span class="breadth-seg up" :style="{ width: breadthWidth(breadth.up) }"></span>
-          <span class="breadth-seg flat" :style="{ width: breadthWidth(breadth.flat) }"></span>
-          <span class="breadth-seg down" :style="{ width: breadthWidth(breadth.down) }"></span>
-        </div>
-        <div v-if="breadth" class="breadth-legend">
-          <span><i class="dot dot-up"></i>上涨 <b class="up">{{ breadth.up }}</b></span>
-          <span><i class="dot dot-down"></i>下跌 <b class="down">{{ breadth.down }}</b></span>
-          <span><i class="dot dot-flat"></i>平盘 <b>{{ breadth.flat }}</b></span>
-          <span>两市成交 <b>{{ yi(breadth.amount, 'yuan') }}</b></span>
+        <template v-if="breadth">
+          <div class="market-big">
+            {{ breadthTotal.toLocaleString('zh-CN') }}
+            <small>{{ breadthKind === 'stock' ? '只 A 股' : breadthKind === 'etf' ? '只 ETF' : '只港股' }}</small>
+          </div>
+          <div class="breadth-track">
+            <span class="breadth-seg up" :style="{ width: breadthWidth(breadth.up) }"></span>
+            <span class="breadth-seg flat" :style="{ width: breadthWidth(breadth.flat) }"></span>
+            <span class="breadth-seg down" :style="{ width: breadthWidth(breadth.down) }"></span>
+          </div>
+          <div class="breadth-legend">
+            <span><i class="dot dot-up"></i>上涨 <b class="up">{{ breadth.up }}</b></span>
+            <span><i class="dot dot-down"></i>下跌 <b class="down">{{ breadth.down }}</b></span>
+            <span><i class="dot dot-flat"></i>平盘 <b>{{ breadth.flat }}</b></span>
+            <span>成交 <b>{{ yi(breadth.amount, 'yuan') }}</b></span>
+          </div>
+        </template>
+        <div v-else class="market-card-note">
+          本地面板暂无{{ breadthKind === 'hk' ? '港股' : '该类' }}数据（只覆盖 A 股与 ETF）
         </div>
       </div>
 
       <div class="panel market-card">
         <div class="market-card-head">
           <h3>涨停 / 跌停</h3>
-          <span class="market-card-note">{{ limit?.date || '—' }}</span>
+          <span class="market-card-note">
+            {{ limit?.date || '—' }}
+            <em v-if="stale(limit?.date)" class="stale-flag">滞后</em>
+          </span>
         </div>
         <div class="market-big">
           <span class="up">{{ limit?.up ?? 0 }}</span>
@@ -173,7 +214,10 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
       <div class="panel market-card">
         <div class="market-card-head">
           <h3>主力净流入</h3>
-          <span class="market-card-note">{{ money?.date || '—' }}</span>
+          <span class="market-card-note">
+            {{ money?.date || '—' }}
+            <em v-if="stale(money?.date)" class="stale-flag">滞后</em>
+          </span>
         </div>
         <div class="market-big" :class="tone(money?.net_mf_amount)">
           {{
@@ -194,7 +238,10 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
       <div class="panel market-card span-2">
         <div class="market-card-head">
           <h3>板块领涨 / 领跌</h3>
-          <span class="market-card-note">{{ sectors?.date || '—' }}</span>
+          <span class="market-card-note">
+            {{ sectors?.date || '—' }}
+            <em v-if="stale(sectors?.date)" class="stale-flag">滞后</em>
+          </span>
         </div>
         <div v-if="sectors" class="sector-columns">
           <div>
@@ -222,7 +269,11 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
       <div class="panel market-card span-2">
         <div class="market-card-head">
           <h3>热门股</h3>
-          <span class="market-card-note">点击查看详情 · 右键更多</span>
+          <span class="market-card-note">
+            {{ data.hot_date || '—' }}
+            <em v-if="stale(data.hot_date)" class="stale-flag">滞后</em>
+            <span v-if="hot.length"> · 点击详情 · 右键更多</span>
+          </span>
         </div>
         <div class="hot-list">
           <button

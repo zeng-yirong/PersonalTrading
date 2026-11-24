@@ -64,7 +64,10 @@ def _quote(conn, symbol: str) -> dict[str, Any]:
     }
 
 
-def _chart(conn, symbol: str, limit: int = 120) -> list[dict[str, Any]]:
+RANGES = {"3m": 60, "6m": 120, "1y": 250, "3y": 750, "all": 10000}
+
+
+def _chart(conn, symbol: str, limit: int = 250) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT trade_date, open, high, low, close, volume, "
         "       close * COALESCE(adj_factor, 1) AS c_adj "
@@ -165,3 +168,14 @@ def detail(symbol: str) -> Optional[dict[str, Any]]:
             "runs": _runs(symbol),
             "watching": _watching(symbol),
         }
+
+
+def history(symbol: str, span: str = "1y") -> Optional[dict[str, Any]]:
+    """Daily bars for one symbol over a named span (``3m`` … ``all``)."""
+    limit = RANGES.get(span, RANGES["1y"])
+    with store.session(read_only=True) as conn:
+        info = _info(conn, symbol)
+        if info is None:
+            return None
+        bars = _chart(conn, symbol, limit)
+    return {"symbol": symbol, "name": info["name"], "span": span, "bars": bars}
