@@ -34,6 +34,28 @@ class ResearchModel(BaseModel):
     source_run_id: Optional[int] = None
 
 
+class TodayModel(BaseModel):
+    force: bool = False
+    model: str = ""
+
+
+@router.get("/today")
+async def today_cached() -> dict[str, Any]:
+    """今天的「一键复盘」是否已经生成过（只读缓存，不调用模型）。"""
+    return await run_in_threadpool(service.daily_cached)
+
+
+@router.post("/today")
+async def today_brief(payload: TodayModel) -> dict[str, Any]:
+    """生成今日复盘：情绪温度、所处阶段、板块结构；当天已生成则直接复用。"""
+    try:
+        return await service.daily_brief(force=payload.force, model=payload.model)
+    except LLMError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except TopicError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/meta")
 async def meta() -> dict[str, Any]:
     try:

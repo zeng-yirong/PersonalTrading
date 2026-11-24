@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import DOMPurify from 'dompurify'
+import { marked } from 'marked'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { api } from '../api'
 import type {
   MarketBreadth,
   MarketBreadthMap,
@@ -10,6 +13,7 @@ import type {
   MarketSectors,
   StockContextPayload,
   StockRef,
+  TopicToday,
 } from '../types'
 
 const props = defineProps<{
@@ -52,6 +56,57 @@ function stale(day: string | null | undefined): boolean {
   const asOf = props.data?.as_of
   return Boolean(day && asOf && day < asOf)
 }
+
+/* ---------- 一键今日复盘（情绪 / 阶段 / 板块） ---------- */
+const today = ref<TopicToday | null>(null)
+const todayBusy = ref(false)
+const todayError = ref('')
+const todaySeconds = ref(0)
+let ticker: ReturnType<typeof setInterval> | null = null
+let startedAt = 0
+
+async function loadToday() {
+  try {
+    today.value = await api.topicToday()
+  } catch {
+    /* 没生成过或后端旧版本：留空即可 */
+  }
+}
+
+async function runToday(force: boolean) {
+  if (todayBusy.value) return
+  todayBusy.value = true
+  todayError.value = ''
+  todaySeconds.value = 0
+  startedAt = Date.now()
+  ticker = setInterval(() => {
+    todaySeconds.value = Math.round((Date.now() - startedAt) / 1000)
+  }, 1000)
+  try {
+    today.value = await api.topicTodayRun(force)
+  } catch (exc) {
+    todayError.value = exc instanceof Error ? exc.message : String(exc)
+  } finally {
+    todayBusy.value = false
+    if (ticker) {
+      clearInterval(ticker)
+      ticker = null
+    }
+  }
+}
+
+function renderBrief(markdown: string): string {
+  return DOMPurify.sanitize(marked.parse(markdown) as string)
+}
+
+onMounted(() => {
+  void loadToday()
+})
+
+onBeforeUnmount(() => {
+  if (ticker) clearInterval(ticker)
+  ticker = null
+})
 
 function num(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
@@ -122,6 +177,14 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
       </div>
     </div>
     <div class="market-actions">
+      <button
+        class="btn"
+        :disabled="todayBusy"
+        :title="today?.report ? '重新调用模型生成（约 15k tokens）' : '生成今日复盘：情绪温度、所处阶段、板块结构（约 15k tokens）'"
+        @click="runToday(Boolean(today?.report))"
+      >
+        {{ todayBusy ? `生成中 ${todaySeconds}s…` : today?.report ? '重新生成复盘' : '一键今日复盘' }}
+      </button>
       <button class="btn ghost" :disabled="loading" @click="emit('refresh')">
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
@@ -264,6 +327,36 @@ function openContext(item: MarketHotStock, event: MouseEvent) {
           </div>
         </div>
         <div v-else class="loading">暂无板块数据</div>
+      </div>
+
+      <div class="panel market-card span-2 market-brief">
+        <div class="market-card-head">
+          <h3>今日复盘 · 情绪 / 阶段 / 板块</h3>
+          <span v-if="today?.report" class="market-card-note">
+            {{ today.report.as_of }} · {{ today.report.verdict }} {{ today.report.confidence }} 分
+            · {{ today.report.model }}
+            <em v-if="today.stale" class="stale-flag">非最新交易日</em>
+          </span>
+          <span v-else class="market-card-note">一键生成，当天只算一次</span>
+        </div>
+
+        <div v-if="todayBusy" class="market-brief-wait">
+          正在让模型写复盘（{{ todaySeconds }} 秒）——大约 15k tokens，请保持页面打开。
+        </div>
+        <div v-else-if="todayError" class="error-bar">{{ todayError }}</div>
+        <template v-else-if="today?.report">
+          <div class="market-brief-actions">
+            <span class="market-card-note">
+              生成于 {{ today.report.created_at?.slice(0, 16).replace('T', ' ') }}
+              <template v-if="today.cached"> · 来自缓存（未重复调用模型）</template>
+            </span>
+          </div>
+          <div class="markdown market-brief-body" v-html="renderBrief(today.report.markdown)"></div>
+        </template>
+        <div v-else class="market-brief-wait">
+          今天还没生成。点右上角「一键今日复盘」，会基于当前面板数据写一份
+          <strong>情绪温度 / 所处阶段 / 板块结构</strong> 的备忘；约 40–90 秒，结果当天保留在这里。
+        </div>
       </div>
 
       <div class="panel market-card span-2">

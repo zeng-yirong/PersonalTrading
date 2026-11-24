@@ -3397,3 +3397,21 @@ details.note summary {
   padding: 8px;
   white-space: pre-wrap;
 }
+
+/* ---------- daily brief (one-click) ---------- */
+.market-brief-body {
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.market-brief-wait {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 6px 0;
+}
+.market-brief-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}

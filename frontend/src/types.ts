@@ -787,6 +787,13 @@ export interface TopicReport extends TopicReportDetail {
   data_gaps: string[]
 }
 
+export interface TopicToday {
+  report: TopicReportDetail | null
+  cached: boolean
+  as_of: string | null
+  stale: boolean
+}
+
 export interface TopicReportSummary {
   id: number
   topic: string

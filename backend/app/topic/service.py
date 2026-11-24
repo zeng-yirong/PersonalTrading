@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from app.agents.llm import ChatClient, LLMError
+from app.data import store as market_store
 from app.topic import context, prompts, store
 
 MAX_TOPIC_CHARS = 80
@@ -96,6 +97,46 @@ async def research(
     record["id"] = store.save(record)
     record["created_at"] = _created_at(record["id"])
     return record
+
+
+
+# 一键「今日复盘」用的是固定主题文本，这样缓存可以直接按 topic 命中。
+DAILY_TOPIC = "今日市场情绪与所处阶段"
+
+
+def _latest_trade_date():
+    with market_store.session(read_only=True) as conn:
+        row = conn.execute("SELECT MAX(trade_date) FROM daily").fetchone()
+    return row[0] if row and row[0] else None
+
+
+def daily_cached() -> dict[str, Any]:
+    """今天已生成过就直接返回，不调用模型、不花钱。"""
+    latest = _latest_trade_date()
+    item = store.latest_for_topic(DAILY_TOPIC)
+    as_of = latest.isoformat() if latest else None
+    if item is None:
+        return {"report": None, "cached": False, "as_of": as_of, "stale": False}
+    return {
+        "report": item,
+        "cached": True,
+        "as_of": as_of,
+        "stale": item.get("as_of") != as_of,
+    }
+
+
+async def daily_brief(force: bool = False, model: str = "") -> dict[str, Any]:
+    """Generate (or reuse) today's market brief: sentiment, stage, sectors."""
+    status = daily_cached()
+    if status["report"] and not force and not status["stale"]:
+        return status
+    report = await research(DAILY_TOPIC, model=model)
+    return {
+        "report": report,
+        "cached": False,
+        "as_of": report.get("as_of"),
+        "stale": False,
+    }
 
 
 def preview(topic: str) -> dict[str, Any]:

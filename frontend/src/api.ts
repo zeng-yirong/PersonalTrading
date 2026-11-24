@@ -39,6 +39,7 @@ import type {
   TopicReport,
   TopicReportDetail,
   TopicReportSummary,
+  TopicToday,
   WatchlistItem,
 } from './types'
 
@@ -148,6 +149,12 @@ export const api = {
   factorRunDetail: (id: number) => request<FactorRunDetail>(`/factors/runs/${id}`),
 
   topicMeta: () => request<TopicMeta>('/topics/meta'),
+  topicToday: () => request<TopicToday>('/topics/today'),
+  topicTodayRun: (force = false) =>
+    request<TopicToday>('/topics/today', {
+      method: 'POST',
+      body: JSON.stringify({ force }),
+    }),
   topicContext: (topic: string) =>
     request<TopicContext>(`/topics/context?topic=${encodeURIComponent(topic)}`),
   topicResearch: (topic: string) =>

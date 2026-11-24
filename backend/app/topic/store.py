@@ -62,3 +62,17 @@ def get(report_id: int) -> Optional[dict[str, Any]]:
     item = dict(row)
     item["report"] = json.loads(item.pop("payload_json") or "{}")
     return item
+
+
+def latest_for_topic(topic: str) -> Optional[dict[str, Any]]:
+    """Newest report for an exact topic text (used by the one-click daily brief)."""
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM topic_reports WHERE topic = ? ORDER BY id DESC LIMIT 1",
+            (topic,),
+        ).fetchone()
+    if row is None:
+        return None
+    item = dict(row)
+    item["report"] = json.loads(item.pop("payload_json") or "{}")
+    return item

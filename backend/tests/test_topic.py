@@ -345,3 +345,38 @@ def test_http_contract(panel, monkeypatch):
     assert client.get(f"/api/topics/reports/{body['id']}").status_code == 200
     assert client.get("/api/topics/reports/99999").status_code == 404
     assert client.post("/api/topics/research", json={"topic": "白"}).status_code == 400
+
+def test_daily_brief_caches_within_the_same_trade_date(panel, monkeypatch):
+    fake = FakeClient(GOOD_REPLY)
+    monkeypatch.setattr(service, "_client", lambda model="": fake)
+
+    first = service.run_sync(service.DAILY_TOPIC)
+    assert fake.calls == 1
+
+    import asyncio
+
+    cached = asyncio.run(service.daily_brief())
+    assert cached["cached"] is True
+    assert cached["report"]["id"] == first["id"]
+    assert cached["stale"] is False
+    assert fake.calls == 1          # 没有再次调用模型
+
+    forced = asyncio.run(service.daily_brief(force=True))
+    assert forced["cached"] is False
+    assert fake.calls == 2
+
+
+def test_daily_today_http_contract(panel, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    fake = FakeClient(GOOD_REPLY)
+    monkeypatch.setattr(service, "_client", lambda model="": fake)
+    client = TestClient(app)
+    empty = client.get("/api/topics/today").json()
+    assert empty["report"] is None
+    created = client.post("/api/topics/today", json={}).json()
+    assert created["cached"] is False
+    again = client.get("/api/topics/today").json()
+    assert again["cached"] is True and again["report"]["id"] == created["report"]["id"]
