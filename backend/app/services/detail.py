@@ -65,6 +65,12 @@ def _quote(conn, symbol: str) -> dict[str, Any]:
 
 
 RANGES = {"3m": 60, "6m": 120, "1y": 250, "3y": 750, "all": 10000}
+PERIODS = ("day", "week", "month")
+PERIOD_COUNTS = {
+    "day": RANGES,
+    "week": {"3m": 13, "6m": 26, "1y": 52, "3y": 156, "all": 10000},
+    "month": {"3m": 3, "6m": 6, "1y": 12, "3y": 36, "all": 10000},
+}
 
 
 def _chart(conn, symbol: str, limit: int = 250) -> list[dict[str, Any]]:
@@ -170,12 +176,54 @@ def detail(symbol: str) -> Optional[dict[str, Any]]:
         }
 
 
-def history(symbol: str, span: str = "1y") -> Optional[dict[str, Any]]:
+def _aggregate(conn, symbol: str, period: str, limit: int) -> list[dict[str, Any]]:
+    """Resample daily bars into weekly/monthly candles (open/high/low/close/volume)."""
+    bucket = (
+        "CAST(date_trunc('week', trade_date) AS DATE)"
+        if period == "week"
+        else "CAST(date_trunc('month', trade_date) AS DATE)"
+    )
+    rows = conn.execute(
+        f"SELECT {bucket} AS bucket, "
+        "       arg_min(open, trade_date) AS open, "
+        "       max(high) AS high, "
+        "       min(low) AS low, "
+        "       arg_max(close, trade_date) AS close, "
+        "       sum(volume) AS volume, "
+        "       arg_max(close * COALESCE(adj_factor, 1), trade_date) AS c_adj "
+        "FROM daily WHERE symbol = ? GROUP BY 1 ORDER BY 1 DESC LIMIT ?",
+        [symbol, limit],
+    ).fetchall()
+    return [
+        {
+            "date": row[0].isoformat(),
+            "open": float(row[1] or 0),
+            "high": float(row[2] or 0),
+            "low": float(row[3] or 0),
+            "close": float(row[4] or 0),
+            "volume": float(row[5] or 0),
+            "c_adj": float(row[6] or 0),
+        }
+        for row in reversed(rows)
+    ]
+
+
+def history(symbol: str, span: str = "1y", period: str = "day") -> Optional[dict[str, Any]]:
     """Daily bars for one symbol over a named span (``3m`` … ``all``)."""
-    limit = RANGES.get(span, RANGES["1y"])
+    if period not in PERIODS:
+        raise ValueError(f"period 只能是 {'/'.join(PERIODS)}")
+    limit = PERIOD_COUNTS[period].get(span, PERIOD_COUNTS[period]["1y"])
     with store.session(read_only=True) as conn:
         info = _info(conn, symbol)
         if info is None:
             return None
-        bars = _chart(conn, symbol, limit)
-    return {"symbol": symbol, "name": info["name"], "span": span, "bars": bars}
+        bars = _chart(conn, symbol, limit) if period == "day" else _aggregate(
+            conn, symbol, period, limit
+        )
+    return {
+        "symbol": symbol,
+        "name": info["name"],
+        "span": span,
+        "period": period,
+        "bars": bars,
+    }

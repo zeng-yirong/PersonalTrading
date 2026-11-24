@@ -31,6 +31,7 @@ import type {
   SearchResult,
   StockDetailData,
   StockHistory,
+  StockPeriod,
   StockRange,
   TopicContext,
   TopicMeta,
@@ -85,9 +86,9 @@ export const api = {
     request<StockDetailData>(`/stocks/${encodeURIComponent(symbol)}/detail`),
   stockIntraday: (symbol: string) =>
     request<IntradayData>(`/stocks/${encodeURIComponent(symbol)}/intraday`),
-  stockHistory: (symbol: string, range: StockRange) =>
+  stockHistory: (symbol: string, range: StockRange, period: StockPeriod = 'day') =>
     request<StockHistory>(
-      `/stocks/${encodeURIComponent(symbol)}/history?range=${encodeURIComponent(range)}`,
+      `/stocks/${encodeURIComponent(symbol)}/history?range=${encodeURIComponent(range)}&period=${encodeURIComponent(period)}`,
     ),
 
   research: (symbol: string) =>

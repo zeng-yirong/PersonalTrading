@@ -182,11 +182,13 @@ export interface StockBar {
 }
 
 export type StockRange = '3m' | '6m' | '1y' | '3y' | 'all'
+export type StockPeriod = 'day' | 'week' | 'month'
 
 export interface StockHistory {
   symbol: string
   name: string
   span: StockRange
+  period: StockPeriod
   bars: StockBar[]
 }
 

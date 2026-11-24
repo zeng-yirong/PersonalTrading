@@ -23,12 +23,19 @@ const asOf = ref('')
 const symbolCount = ref(0)
 const showQuery = ref(false)
 
-const PRESETS = [
-  '市盈率低于30、ROE大于15%、20日主力净流入为正',
-  '近20日主力净流入超过5亿、换手率大于3%、市盈率低于行业中位数',
-  '股价回撤超过30%但ROE大于12%、资产负债率低于50%',
-  '股息率超过4%、市盈率低于15、市值超过200亿',
-  '近5日涨停、龙虎榜上榜过、流通市值低于100亿',
+const PRESETS: { label: string; text: string }[] = [
+  { label: '低估值蓝筹', text: '市盈率低于15、ROE大于15%、市值超过500亿' },
+  { label: '高成长', text: '营收增速大于25%、净利润增速大于25%、市盈率低于60' },
+  { label: '高股息防御', text: '股息率超过4%、市盈率低于20、资产负债率低于60' },
+  { label: '超跌反弹', text: '股价回撤超过40%、ROE大于8%、换手率大于2' },
+  { label: '量价齐升', text: '量比大于1.5、近20日涨幅大于10%、成交额大于5亿' },
+  { label: '放量突破', text: '近5日涨幅大于8%、量能波动20日大于0.3、成交额大于3亿' },
+  { label: '低波动', text: '量能波动20日小于0.3、市盈率低于30、成交额大于1亿' },
+  { label: '业绩预增', text: '净利润增速大于50%、营收增速大于20%、市盈率低于50' },
+  { label: '破净修复', text: '市净率低于1、ROE大于5、资产负债率低于70' },
+  { label: '主力流入', text: '近20日主力净流入超过3亿、换手率大于2、市盈率低于40' },
+  { label: '公告后强势', text: '公告后漂移大于5、市盈率低于40、成交额大于1亿' },
+  { label: '涨停回踩', text: '近5日涨停、换手率大于5、市盈率低于60' },
 ]
 
 const visibleFields = computed(() => {
@@ -132,12 +139,13 @@ onMounted(async () => {
     <div class="screen-presets">
       <button
         v-for="preset in PRESETS"
-        :key="preset"
+        :key="preset.label"
         class="chip"
         :disabled="loading"
-        @click="run(preset)"
+        :title="preset.text"
+        @click="run(preset.text)"
       >
-        {{ preset.slice(0, 14) }}…
+        {{ preset.label }}
       </button>
     </div>
 

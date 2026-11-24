@@ -7,6 +7,7 @@ import type {
   StockBar,
   StockDetailData,
   StockFinancial,
+  StockPeriod,
   StockRange,
 } from '../types'
 import IntradayChart from './IntradayChart.vue'
@@ -25,7 +26,7 @@ const emit = defineEmits<{
   (e: 'research'): void
 }>()
 
-type ChartTab = 'intraday' | 'day'
+type ChartTab = 'intraday' | 'day' | 'week' | 'month'
 
 const RANGES: { key: StockRange; label: string }[] = [
   { key: '3m', label: '3月' },
@@ -33,6 +34,13 @@ const RANGES: { key: StockRange; label: string }[] = [
   { key: '1y', label: '1年' },
   { key: '3y', label: '3年' },
   { key: 'all', label: '全部' },
+]
+
+const TABS: { key: ChartTab; label: string }[] = [
+  { key: 'intraday', label: '分时' },
+  { key: 'day', label: '日K' },
+  { key: 'week', label: '周K' },
+  { key: 'month', label: '月K' },
 ]
 
 interface FactorRow {
@@ -223,11 +231,23 @@ const finRows = computed(() => {
 
 const runs = computed(() => detail.value?.runs ?? [])
 
+const period = computed<StockPeriod>(() => {
+  if (tab.value === 'week') return 'week'
+  if (tab.value === 'month') return 'month'
+  return 'day'
+})
+
+const periodLabel = computed(() => {
+  if (period.value === 'week') return '周K'
+  if (period.value === 'month') return '月K'
+  return '日K'
+})
+
 async function loadHistory() {
   if (!props.symbol) return
   historyLoading.value = true
   try {
-    const payload = await api.stockHistory(props.symbol, span.value)
+    const payload = await api.stockHistory(props.symbol, span.value, period.value)
     historyBars.value = payload.bars
   } catch {
     historyBars.value = []
@@ -241,7 +261,7 @@ watch(span, () => {
 })
 
 watch(tab, (value) => {
-  if (value === 'day' && !historyBars.value.length) void loadHistory()
+  if (value !== 'intraday') void loadHistory()
 })
 
 async function load(symbol: string) {
@@ -257,7 +277,7 @@ async function load(symbol: string) {
     detail.value = data
     intraday.value = data.intraday
     loading.value = false
-    if (tab.value === 'day') void loadHistory()
+    if (tab.value !== 'intraday') void loadHistory()
     try {
       const minute = await api.stockIntraday(symbol)
       if (current === token && minute.points.length) intraday.value = minute
@@ -352,14 +372,13 @@ watch(
         <div class="detail-toolbar">
           <div class="tabs">
             <button
+              v-for="item in TABS"
+              :key="item.key"
               class="tab"
-              :class="{ active: tab === 'intraday' }"
-              @click="tab = 'intraday'"
+              :class="{ active: tab === item.key }"
+              @click="tab = item.key"
             >
-              分时
-            </button>
-            <button class="tab" :class="{ active: tab === 'day' }" @click="tab = 'day'">
-              日K
+              {{ item.label }}
             </button>
           </div>
           <div class="sub-meta" style="margin: 0">
@@ -371,13 +390,13 @@ watch(
             </template>
             <template v-else>
               <span>
-                共 {{ historyBars.length || detail.chart.length }} 个交易日
+                {{ periodLabel }} 共 {{ historyBars.length || detail.chart.length }} 根
                 <template v-if="historyLoading"> · 读取中…</template>
               </span>
             </template>
           </div>
         </div>
-        <div v-if="tab === 'day'" class="range-chips">
+        <div v-if="tab !== 'intraday'" class="range-chips">
           <button
             v-for="range in RANGES"
             :key="range.key"

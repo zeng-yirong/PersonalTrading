@@ -26,7 +26,11 @@ async def detail(symbol: str):
 
 
 @router.get("/stocks/{symbol}/history")
-async def history(symbol: str, span: str = Query("1y", alias="range")):
+async def history(
+    symbol: str,
+    span: str = Query("1y", alias="range"),
+    period: str = Query("day"),
+):
     from starlette.concurrency import run_in_threadpool
 
     from app.services import detail as detail_service
@@ -38,7 +42,11 @@ async def history(symbol: str, span: str = Query("1y", alias="range")):
         raise HTTPException(
             status_code=400, detail=f"range 只能是 {'/'.join(detail_service.RANGES)}"
         )
-    payload = await run_in_threadpool(detail_service.history, code, span)
+    if period not in detail_service.PERIODS:
+        raise HTTPException(
+            status_code=400, detail=f"period 只能是 {'/'.join(detail_service.PERIODS)}"
+        )
+    payload = await run_in_threadpool(detail_service.history, code, span, period)
     if payload is None:
         raise HTTPException(status_code=404, detail=f"没有 {code} 这只股票")
     return payload
