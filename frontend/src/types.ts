@@ -29,6 +29,7 @@ export interface QuestionGroup {
 export type SectionKey =
   | 'market'
   | 'watchlist'
+  | 'universe'
   | 'screen'
   | 'backtest'
   | 'topic'
@@ -1227,4 +1228,36 @@ export interface OpsHealth {
   recent_sync: OpsSyncLog[]
   issues: string[]
   fingerprint: OpsFingerprint
+}
+
+/* ---------- 全市场浏览 ---------- */
+
+export type UniverseAsset = 'stock' | 'etf' | 'index' | 'hk'
+
+export interface UniverseRow {
+  symbol?: string
+  code?: string
+  name: string
+  industry?: string | null
+  board?: string | null
+  category?: string | null
+  close?: number | null
+  pct_chg?: number | null
+  amount?: number | null
+  total_mv?: number | null
+  pe_ttm?: number | null
+  turnover_rate?: number | null
+  ret20?: number | null
+  fd_pead?: number | null
+  date?: string | null
+}
+
+export interface UniverseResponse {
+  asset: UniverseAsset
+  as_of: string | null
+  total: number
+  page: number
+  page_size: number
+  rows: UniverseRow[]
+  note?: string
 }

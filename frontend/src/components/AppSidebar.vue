@@ -34,6 +34,11 @@ const items = computed<NavItem[]>(() => [
     badge: props.watchCount,
   },
   {
+    key: 'universe',
+    label: '全市场',
+    icon: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
+  },
+  {
     key: 'agent',
     label: '推演',
     icon: [

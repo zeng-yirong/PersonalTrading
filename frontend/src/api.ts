@@ -40,6 +40,8 @@ import type {
   TopicReportDetail,
   TopicReportSummary,
   TopicToday,
+  UniverseAsset,
+  UniverseResponse,
   WatchlistItem,
 } from './types'
 
@@ -198,5 +200,17 @@ export const api = {
     }),
   opsUsage: (days = 14) => request<OpsUsage>(`/usage?days=${days}`),
   opsHealth: () => request<OpsHealth>('/data/health'),
+  universeList: (
+    asset: UniverseAsset,
+    params: { q?: string; sort?: string; order?: string; page?: number; page_size?: number } = {},
+  ) => {
+    const search = new URLSearchParams({ asset })
+    if (params.q) search.set('q', params.q)
+    if (params.sort) search.set('sort', params.sort)
+    if (params.order) search.set('order', params.order)
+    if (params.page) search.set('page', String(params.page))
+    if (params.page_size) search.set('page_size', String(params.page_size))
+    return request<UniverseResponse>(`/market/universe/list?${search.toString()}`)
+  },
   opsFingerprint: () => request<OpsFingerprint>('/data/fingerprint'),
 }

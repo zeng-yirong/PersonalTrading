@@ -3657,3 +3657,26 @@ details.note summary {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- universe browser ---------- */
+.universe-search {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.universe-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.universe-table tr.clickable {
+  cursor: pointer;
+}
+.universe-table tr.clickable:hover {
+  background: var(--accent-soft, rgba(77, 163, 255, 0.08));
+}
+.universe-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}

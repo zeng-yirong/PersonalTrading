@@ -9,7 +9,7 @@ import pytest
 from app.config import settings
 from app.data import intraday, store
 from app.db import init_db
-from app.market import overview
+from app.market import overview, universe
 from app.services import detail as detail_module
 
 
@@ -62,11 +62,16 @@ def panel(tmp_path, monkeypatch):
             "ps_ttm": 10.0, "dv_ttm": 1.5, "total_mv": 1.8e12, "circ_mv": 1.8e12,
             "turnover_rate": 0.30, "volume_ratio": 1.1}])
     table("screen_snapshot",
-          {"symbol": "VARCHAR", "trade_date": "DATE", "pe_ttm": "DOUBLE",
+          {"symbol": "VARCHAR", "trade_date": "DATE", "asset_type": "VARCHAR", "name": "VARCHAR",
+           "industry": "VARCHAR", "board": "VARCHAR", "close": "DOUBLE",
+           "pct_chg": "DOUBLE", "amount": "DOUBLE", "total_mv": "DOUBLE",
+           "pe_ttm": "DOUBLE", "turnover_rate": "DOUBLE", "ret20": "DOUBLE",
            "a_vstd_20": "DOUBLE", "fd_pead": "DOUBLE"},
           ("symbol", "trade_date"),
-          [{"symbol": "600519", "trade_date": days[-1], "pe_ttm": 25.0,
-            "a_vstd_20": 0.35, "fd_pead": 1.2}])
+          [{"symbol": "600519", "trade_date": days[-1], "asset_type": "stock", "name": "贵州茅台",
+            "industry": "白酒", "board": "沪市主板", "close": 1440.0,
+            "pct_chg": 1.2, "amount": 1e9, "total_mv": 1.8e8, "pe_ttm": 25.0,
+            "turnover_rate": 0.3, "ret20": 5.0, "a_vstd_20": 0.35, "fd_pead": 1.2}])
     table("fina_indicator_vip",
           {"ts_code": "VARCHAR", "ann_date": "DATE", "end_date": "DATE", "roe": "DOUBLE",
            "netprofit_margin": "DOUBLE", "grossprofit_margin": "DOUBLE",
@@ -232,3 +237,27 @@ def test_detail_http_contract(panel, monkeypatch):
     assert client.get("/api/stocks/999999/detail").status_code == 404
     market = client.get("/api/market/overview").json()
     assert market["as_of"] == panel[-1].isoformat()
+
+def test_universe_lists(panel):
+    stock = universe.list_assets("stock", page_size=10)
+    assert stock["total"] >= 1
+    assert stock["rows"][0]["symbol"]
+    index = universe.list_assets("index", page_size=10)
+    assert index["total"] >= 1
+    hk = universe.list_assets("hk")
+    assert hk["note"]
+    with pytest.raises(ValueError):
+        universe.list_assets("bond")
+
+
+def test_universe_http_contract(panel):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    ok = client.get("/api/market/universe/list?asset=stock&page_size=10")
+    assert ok.status_code == 200
+    assert "rows" in ok.json()
+    bad = client.get("/api/market/universe/list?asset=bond")
+    assert bad.status_code == 400

@@ -25,6 +25,7 @@ import SectionBoundary from './components/SectionBoundary.vue'
 import StockContextMenu from './components/StockContextMenu.vue'
 import StockDetail from './components/StockDetail.vue'
 import TopicPanel from './components/TopicPanel.vue'
+import UniversePanel from './components/UniversePanel.vue'
 import WatchlistPanel from './components/WatchlistPanel.vue'
 
 const theme = ref<ThemeMode>(readTheme())
@@ -413,6 +414,11 @@ onBeforeUnmount(() => {
               @select="onSelectSymbol"
               @add="addFromSearch"
               @remove="removeFromWatchlist"
+              @context="openContext"
+            />
+            <UniversePanel
+              v-else-if="section === 'universe'"
+              @select="onSelectRef"
               @context="openContext"
             />
             <ScreenPanel

@@ -68,6 +68,27 @@ async def status() -> dict:
     }
 
 
+@router.get("/universe/list")
+async def universe_list(
+    asset: str = Query("stock"),
+    q: str = "",
+    sort: str = "",
+    order: str = "desc",
+    page: int = 1,
+    page_size: int = 50,
+) -> dict:
+    """全市场浏览：A股 / ETF / 指数 / 港股（仅恒指）。"""
+    from app.market import universe as universe_module
+
+    await _require_panel()
+    try:
+        return await run_in_threadpool(
+            universe_module.list_assets, asset, q, sort, order, page, page_size
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/overview")
 async def overview() -> dict:
     """Today's market: indices, breadth, sectors, money flow, hot stocks."""
