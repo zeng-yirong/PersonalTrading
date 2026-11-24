@@ -108,6 +108,8 @@ PersonalTrading/
 
 ## 快速开始
 
+> 想先人工过一遍功能？照着 [manual-check.md](manual-check.md) 的 15 条用例走，约 60–90 分钟（会花约 60k tokens）。
+
 ### 1. 后端
 
 ```bash
