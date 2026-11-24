@@ -80,6 +80,7 @@ const todayBusy = ref(false)
 const todayError = ref('')
 const todaySeconds = ref(0)
 const viewing = ref<TopicReportDetail | null>(null)
+const briefOpen = ref(false)
 const showHistory = ref(false)
 let ticker: ReturnType<typeof setInterval> | null = null
 let startedAt = 0
@@ -118,6 +119,7 @@ async function runToday(force: boolean) {
   if (todayBusy.value) return
   todayBusy.value = true
   todayError.value = ''
+  briefOpen.value = true
   viewing.value = null
   todaySeconds.value = 0
   startedAt = Date.now()
@@ -139,6 +141,7 @@ async function runToday(force: boolean) {
 
 async function openHistory(item: { id: number }) {
   try {
+    briefOpen.value = true
     viewing.value = await api.topicReport(item.id)
   } catch (exc) {
     todayError.value = exc instanceof Error ? exc.message : String(exc)
@@ -472,13 +475,24 @@ function breadthWidth(value: number): string {
             <em v-if="today.stale" class="stale-flag">非最新交易日</em>
           </span>
           <span v-else class="market-card-note">一键生成，当天只算一次</span>
+          <button type="button" class="btn ghost" @click="briefOpen = !briefOpen">
+            {{ briefOpen ? '收起' : '展开' }}
+          </button>
+        </div>
+
+        <div v-if="!briefOpen" class="market-brief-wait">
+          <template v-if="sentiment">
+            情绪 {{ sentiment.score.toFixed(1) }} · {{ sentiment.stage }}
+            <template v-if="today?.report"> · {{ today.report.title }}</template>
+          </template>
+          <template v-else>今天还没生成，点右上角「一键今日复盘」。</template>
         </div>
 
         <div v-if="todayBusy" class="market-brief-wait">
           正在让模型写复盘（{{ todaySeconds }} 秒）——大约 3–8k tokens，请保持页面打开。
         </div>
         <div v-else-if="todayError" class="error-bar">{{ todayError }}</div>
-        <template v-else>
+        <template v-else-if="briefOpen">
           <div v-if="sentiment" class="brief-stats">
             <div class="brief-stat">
               <span>情绪温度</span>
