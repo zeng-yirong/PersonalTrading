@@ -200,6 +200,12 @@ export const api = {
     }),
   opsUsage: (days = 14) => request<OpsUsage>(`/usage?days=${days}`),
   opsHealth: () => request<OpsHealth>('/data/health'),
+  indexDetail: (code: string) =>
+    request<StockDetailData>(`/index/${encodeURIComponent(code)}/detail`),
+  indexHistory: (code: string, range: StockRange, period: StockPeriod = 'day') =>
+    request<StockHistory>(
+      `/index/${encodeURIComponent(code)}/history?range=${encodeURIComponent(range)}&period=${encodeURIComponent(period)}`,
+    ),
   universeList: (
     asset: UniverseAsset,
     params: { q?: string; sort?: string; order?: string; page?: number; page_size?: number } = {},

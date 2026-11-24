@@ -11,6 +11,7 @@ from app.data import intraday, store
 from app.db import init_db
 from app.market import overview, universe
 from app.services import detail as detail_module
+from app.services import index_detail as index_module
 
 
 @pytest.fixture
@@ -81,11 +82,16 @@ def panel(tmp_path, monkeypatch):
             "roe": 30.0, "netprofit_margin": 50.0, "grossprofit_margin": 90.0,
             "debt_to_assets": 20.0, "or_yoy": 9.0, "netprofit_yoy": 12.0}])
     table("index_daily",
-          {"ts_code": "VARCHAR", "trade_date": "DATE", "close": "DOUBLE",
-           "pct_chg": "DOUBLE", "amount": "DOUBLE"},
+          {"ts_code": "VARCHAR", "trade_date": "DATE", "open": "DOUBLE",
+           "high": "DOUBLE", "low": "DOUBLE", "close": "DOUBLE",
+           "pre_close": "DOUBLE", "vol": "DOUBLE", "pct_chg": "DOUBLE",
+           "amount": "DOUBLE"},
           ("ts_code", "trade_date"),
-          [{"ts_code": "000300.SH", "trade_date": days[-1], "close": 4000.0,
-            "pct_chg": 0.8, "amount": 3e11}])
+          [{"ts_code": "000300.SH", "trade_date": day, "open": 3980.0 + step * 4,
+            "high": 4010.0 + step * 4, "low": 3970.0 + step * 4,
+            "close": 4000.0 + step * 4, "pre_close": 3990.0 + step * 4,
+            "vol": 1e8, "pct_chg": 0.8, "amount": 3e11}
+           for step, day in enumerate(days)])
     table("limit_list_d",
           {"trade_date": "DATE", "ts_code": "VARCHAR", "limit": "VARCHAR"},
           ("trade_date", "ts_code"),
@@ -261,3 +267,24 @@ def test_universe_http_contract(panel):
     assert "rows" in ok.json()
     bad = client.get("/api/market/universe/list?asset=bond")
     assert bad.status_code == 400
+
+def test_index_detail_and_history(panel):
+    payload = index_module.detail("000300.SH")
+    assert payload["info"]["name"]
+    assert payload["chart"]
+    assert payload["kind"] == "index"
+    assert payload["factors"] is None
+    week = index_module.history("000300.SH", "1y", "week")
+    assert week["bars"]
+    assert index_module.detail("999999.SH") is None
+
+
+def test_index_http_contract(panel):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    assert client.get("/api/index/000300.SH/detail").status_code == 200
+    assert client.get("/api/index/000300.SH/history?range=1y&period=week").status_code == 200
+    assert client.get("/api/index/999999.SH/detail").status_code == 404

@@ -31,6 +31,7 @@ import WatchlistPanel from './components/WatchlistPanel.vue'
 const theme = ref<ThemeMode>(readTheme())
 const section = ref<SectionKey>('market')
 const detailSymbol = ref<string | null>(null)
+const detailKind = ref<'stock' | 'index'>('stock')
 const currentSymbol = ref<string | null>(null)
 const currentName = ref('')
 
@@ -147,9 +148,11 @@ watch(currentSymbol, (symbol) => {
   if (symbol) void loadNotes(symbol)
 })
 
-function openDetail(symbol: string, name = '') {
-  const target = bareSymbol(symbol)
+function openDetail(symbol: string, name = '', kind: 'stock' | 'index' = 'stock') {
+  // 指数代码带交易所后缀（000300.SH），不能像个股那样去掉
+  const target = kind === 'index' ? symbol : bareSymbol(symbol)
   if (!target) return
+  detailKind.value = kind
   savedSectionScroll = contentScroll.value?.scrollTop ?? 0
   currentSymbol.value = target
   currentName.value = name || watchlistName(target)
@@ -166,7 +169,7 @@ function onSelectSymbol(symbol: string) {
 }
 
 function onSelectRef(payload: StockRef) {
-  openDetail(payload.symbol, payload.name)
+  openDetail(payload.symbol, payload.name, payload.kind ?? 'stock')
 }
 
 function closeDetail() {
@@ -184,7 +187,7 @@ function toggleCurrentWatch() {
 }
 
 function startResearch() {
-  if (!currentSymbol.value) return
+  if (!currentSymbol.value || detailKind.value === 'index') return
   detailSymbol.value = null
   menu.open = false
   section.value = 'agent'
@@ -453,6 +456,7 @@ onBeforeUnmount(() => {
         <StockDetail
           v-if="detailSymbol"
           :symbol="detailSymbol"
+          :kind="detailKind"
           :name="currentName"
           :watching="detailWatching"
           :busy="watchBusy"

@@ -11,6 +11,7 @@ export interface WatchlistItem {
 export interface StockRef {
   symbol: string
   name: string
+  kind?: 'stock' | 'index'
 }
 
 /** 右键菜单事件负载：客户端坐标用于把菜单放在鼠标旁。 */

@@ -165,6 +165,11 @@ function rowKey(row: UniverseRow): string {
 }
 
 function openRow(row: UniverseRow) {
+  if (asset.value === 'index') {
+    if (!row.code) return
+    emit('select', { symbol: row.code, name: row.name, kind: 'index' })
+    return
+  }
   if (asset.value !== 'stock' && asset.value !== 'etf') return
   const symbol = row.symbol
   if (!symbol) return
@@ -257,7 +262,7 @@ watch(asset, () => {
           <tr
             v-for="row in data?.rows ?? []"
             :key="rowKey(row)"
-            :class="{ clickable: asset === 'stock' || asset === 'etf' }"
+            :class="{ clickable: asset !== 'hk' }"
             @click="openRow(row)"
             @contextmenu.prevent="openContext(row, $event)"
           >

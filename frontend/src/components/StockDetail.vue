@@ -18,7 +18,10 @@ const props = defineProps<{
   name: string
   watching: boolean
   busy: boolean
+  kind?: 'stock' | 'index'
 }>()
+
+const isIndex = computed(() => props.kind === 'index')
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -42,6 +45,8 @@ const TABS: { key: ChartTab; label: string }[] = [
   { key: 'week', label: '周K' },
   { key: 'month', label: '月K' },
 ]
+
+const visibleTabs = computed(() => (isIndex.value ? TABS.filter((item) => item.key !== 'intraday') : TABS))
 
 interface FactorRow {
   k: string
@@ -168,6 +173,15 @@ const dayChart = computed<ChartData | null>(() => {
 const metrics = computed(() => {
   const row = quote.value
   if (!row) return []
+  if (isIndex.value) {
+    return [
+      { k: '今开', v: num(row.open), tone: tone(row.open - (row.pre_close ?? 0)) },
+      { k: '最高', v: num(row.high), tone: tone(row.high - (row.pre_close ?? 0)) },
+      { k: '最低', v: num(row.low), tone: tone(row.low - (row.pre_close ?? 0)) },
+      { k: '昨收', v: num(row.pre_close), tone: 'flat' },
+      { k: '成交额', v: money(row.amount), tone: 'flat' },
+    ]
+  }
   return [
     { k: '今开', v: num(row.open), tone: tone(row.open - row.pre_close) },
     { k: '最高', v: num(row.high), tone: tone(row.high - row.pre_close) },
@@ -256,7 +270,9 @@ async function loadHistory() {
   historyLoading.value = true
   historyError.value = ''
   try {
-    const payload = await api.stockHistory(props.symbol, span.value, period.value)
+    const payload = isIndex.value
+      ? await api.indexHistory(props.symbol, span.value, period.value)
+      : await api.stockHistory(props.symbol, span.value, period.value)
     if (current !== historyToken) return
     historyBars.value = payload.bars
   } catch (exc) {
@@ -284,12 +300,13 @@ async function load(symbol: string) {
   intraday.value = null
   historyBars.value = []
   try {
-    const data = await api.stockDetail(symbol)
+    const data = isIndex.value ? await api.indexDetail(symbol) : await api.stockDetail(symbol)
     if (current !== token) return
     detail.value = data
     intraday.value = data.intraday
     loading.value = false
     if (tab.value !== 'intraday') void loadHistory()
+    if (isIndex.value) return
     try {
       const minute = await api.stockIntraday(symbol)
       if (current === token && minute.points.length) intraday.value = minute
@@ -306,7 +323,7 @@ async function load(symbol: string) {
 watch(
   () => props.symbol,
   (symbol) => {
-    tab.value = 'intraday'
+    tab.value = isIndex.value ? 'day' : 'intraday'
     void load(symbol)
   },
   { immediate: true },
@@ -362,7 +379,7 @@ watch(
               {{ num(quote?.high) }} · 低 {{ num(quote?.low) }}
             </div>
           </div>
-          <div class="detail-actions">
+          <div v-if="!isIndex" class="detail-actions">
             <button class="btn" :disabled="busy || loading" @click="emit('toggle-watch')">
               {{ watching ? '移出自选' : '加入自选' }}
             </button>
@@ -384,7 +401,7 @@ watch(
         <div class="detail-toolbar">
           <div class="tabs">
             <button
-              v-for="item in TABS"
+              v-for="item in visibleTabs"
               :key="item.key"
               class="tab"
               :class="{ active: tab === item.key }"
@@ -447,7 +464,7 @@ watch(
         </div>
       </section>
 
-      <div class="detail-cols">
+      <div v-if="!isIndex" class="detail-cols">
         <section class="panel card">
           <div class="research-head" style="margin-bottom: 8px">
             <h3 style="margin: 0">因子快照</h3>
@@ -481,7 +498,7 @@ watch(
         </section>
       </div>
 
-      <section class="panel card">
+      <section v-if="!isIndex" class="panel card">
         <div class="research-head" style="margin-bottom: 8px">
           <div>
             <h3 style="margin: 0">最近推演</h3>

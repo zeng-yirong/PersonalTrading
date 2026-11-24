@@ -52,6 +52,35 @@ async def history(
     return payload
 
 
+@router.get("/index/{code}/detail")
+async def index_detail(code: str):
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services import index_detail as index_service
+
+    payload = await run_in_threadpool(index_service.detail, code)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"没有 {code} 这个指数")
+    return payload
+
+
+@router.get("/index/{code}/history")
+async def index_history(code: str, span: str = Query("1y", alias="range"), period: str = Query("day")):
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services import index_detail as index_service
+
+    if span not in index_service.RANGES:
+        raise HTTPException(status_code=400, detail="range 参数无效")
+    try:
+        payload = await run_in_threadpool(index_service.history, code, span, period)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"没有 {code} 这个指数")
+    return payload
+
+
 @router.get("/stocks/{symbol}/intraday")
 async def intraday(symbol: str):
     from starlette.concurrency import run_in_threadpool
