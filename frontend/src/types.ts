@@ -7,6 +7,37 @@ export interface WatchlistItem {
   created_at?: string
 }
 
+/** 一个可点开的标的引用，用于详情、右键菜单与跨模块跳转。 */
+export interface StockRef {
+  symbol: string
+  name: string
+}
+
+/** 右键菜单事件负载：客户端坐标用于把菜单放在鼠标旁。 */
+export interface StockContextPayload extends StockRef {
+  x: number
+  y: number
+}
+
+/** 常用问题分组，QuestionSuggest 的输入。 */
+export interface QuestionGroup {
+  label: string
+  questions: string[]
+}
+
+/** 左侧导航分区。 */
+export type SectionKey =
+  | 'market'
+  | 'watchlist'
+  | 'screen'
+  | 'backtest'
+  | 'topic'
+  | 'factor'
+  | 'agent'
+  | 'ops'
+
+export type ThemeMode = 'dark' | 'light'
+
 export interface SearchResult {
   symbol: string
   name: string
@@ -36,6 +67,157 @@ export interface Quote {
   pe?: number | null
   pb?: number | null
   total_mv?: number | null
+}
+
+/* ---------- market overview ---------- */
+
+export interface MarketIndex {
+  code: string
+  label: string
+  close: number
+  pct_chg: number
+  amount: number
+}
+
+export interface MarketBreadth {
+  up: number
+  down: number
+  flat: number
+  amount: number
+}
+
+export interface MarketLimit {
+  up: number
+  down: number
+  date: string | null
+}
+
+export interface MarketMoney {
+  net_mf_amount: number | null
+  date: string | null
+}
+
+export interface MarketSector {
+  name: string
+  pct_chg: number
+  amount: number
+}
+
+export interface MarketSectors {
+  top: MarketSector[]
+  bottom: MarketSector[]
+  date: string | null
+}
+
+export interface MarketHotStock {
+  code: string
+  name: string
+  rank: number
+  pct_chg: number
+  hot: number
+}
+
+/** ``GET /api/market/overview``；数据空库时后端只返回 as_of + empty。 */
+export interface MarketOverview {
+  as_of: string | null
+  prev_date?: string | null
+  indices?: MarketIndex[]
+  breadth?: MarketBreadth
+  limit?: MarketLimit
+  money?: MarketMoney
+  sectors?: MarketSectors
+  hot?: MarketHotStock[]
+  empty?: boolean
+}
+
+/* ---------- stock detail ---------- */
+
+export interface StockInfo {
+  symbol: string
+  ts_code: string
+  name: string
+  industry: string
+  board: string
+  asset_type: AssetType
+  list_date: string
+}
+
+export interface StockDetailQuote {
+  trade_date: string
+  close: number
+  pre_close: number
+  pct_chg: number
+  high: number
+  low: number
+  open: number
+  volume: number
+  amount: number
+  pe_ttm: number | null
+  pb: number | null
+  ps_ttm: number | null
+  dv_ttm: number | null
+  total_mv: number | null
+  circ_mv: number | null
+  turnover_rate: number | null
+  volume_ratio: number | null
+}
+
+export interface StockBar {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  c_adj: number
+}
+
+export interface StockFinancial {
+  ann_date: string
+  end_date: string
+  roe: number | null
+  net_margin: number | null
+  gross_margin: number | null
+  debt_ratio: number | null
+  revenue_yoy: number | null
+  profit_yoy: number | null
+}
+
+export interface IntradayPoint {
+  time: string
+  price: number
+  avg: number
+  volume: number
+  amount: number
+}
+
+export interface IntradayData {
+  symbol: string
+  name: string
+  trade_date: string
+  pre_close: number | null
+  source: string
+  points: IntradayPoint[]
+}
+
+export interface StockRunBrief {
+  id: number
+  started_at: string
+  status: string
+  decision: string
+  position_pct: number
+}
+
+/** ``GET /api/stocks/{symbol}/detail`` 的整包。 */
+export interface StockDetailData {
+  info: StockInfo
+  quote: StockDetailQuote
+  chart: StockBar[]
+  factors: Record<string, unknown> | null
+  financial: StockFinancial | null
+  intraday: IntradayData | null
+  runs: StockRunBrief[]
+  watching: boolean
 }
 
 export interface Candle {

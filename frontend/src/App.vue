@@ -1,290 +1,464 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { api } from './api'
+import { applyTheme, readTheme } from './theme'
 import type {
-  ChartData,
-  Fundamentals,
+  MarketOverview,
   Meta,
-  Quote,
   ResearchNote,
   ScreenQueryPayload,
   SearchResult,
+  SectionKey,
+  StockContextPayload,
+  StockRef,
+  ThemeMode,
   WatchlistItem,
 } from './types'
-import WatchlistPanel from './components/WatchlistPanel.vue'
-import StockHeader from './components/StockHeader.vue'
-import PriceChart from './components/PriceChart.vue'
-import IndicatorPanel from './components/IndicatorPanel.vue'
-import FundamentalsCard from './components/FundamentalsCard.vue'
-import ResearchPanel from './components/ResearchPanel.vue'
-import AgentPanel from './components/AgentPanel.vue'
-import ScreenPanel from './components/ScreenPanel.vue'
-import BacktestPanel from './components/BacktestPanel.vue'
-import TopicPanel from './components/TopicPanel.vue'
+import AppSidebar from './components/AppSidebar.vue'
+import AgentSection from './components/AgentSection.vue'
+import BacktestSection from './components/BacktestSection.vue'
 import FactorPanel from './components/FactorPanel.vue'
-import PaperPanel from './components/PaperPanel.vue'
+import MarketOverviewPanel from './components/MarketOverview.vue'
 import OpsPanel from './components/OpsPanel.vue'
+import ScreenPanel from './components/ScreenPanel.vue'
+import StockContextMenu from './components/StockContextMenu.vue'
+import StockDetail from './components/StockDetail.vue'
+import TopicPanel from './components/TopicPanel.vue'
+import WatchlistPanel from './components/WatchlistPanel.vue'
+
+const theme = ref<ThemeMode>(readTheme())
+const section = ref<SectionKey>('market')
+const detailSymbol = ref<string | null>(null)
+const currentSymbol = ref<string | null>(null)
+const currentName = ref('')
 
 const meta = ref<Meta | null>(null)
 const watchlist = ref<WatchlistItem[]>([])
-const selected = ref<string | null>(null)
-const quote = ref<Quote | null>(null)
-const chart = ref<ChartData | null>(null)
-const fundamentals = ref<Fundamentals | null>(null)
-const notes = ref<ResearchNote[]>([])
-const period = ref<'day' | 'week' | 'month'>('day')
+const overview = ref<MarketOverview | null>(null)
+const overviewLoading = ref(false)
+const overviewError = ref('')
 const error = ref('')
-const researchError = ref('')
-const backtestRef = ref<InstanceType<typeof BacktestPanel> | null>(null)
 
-const loading = reactive({
-  watchlist: false,
-  quote: false,
-  chart: false,
-  fundamentals: false,
-  notes: false,
-  research: false,
+const notes = ref<ResearchNote[]>([])
+const notesError = ref('')
+const researchLoading = ref(false)
+
+const watchBusy = ref(false)
+const toast = ref('')
+const backtestSectionRef = ref<InstanceType<typeof BacktestSection> | null>(null)
+const contentScroll = ref<HTMLDivElement | null>(null)
+let savedSectionScroll = 0
+
+const menu = reactive({
+  open: false,
+  x: 0,
+  y: 0,
+  symbol: '',
+  name: '',
 })
 
-const selectedName = computed(
-  () => quote.value?.name || watchlist.value.find((item) => item.symbol === selected.value)?.name || '',
-)
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+let notesToken = 0
 
-function messageOf(exc: unknown) {
+function messageOf(exc: unknown): string {
   return exc instanceof Error ? exc.message : String(exc)
 }
 
-async function loadWatchlist() {
-  loading.watchlist = true
-  try {
-    watchlist.value = await api.watchlist()
-  } catch (exc) {
-    error.value = messageOf(exc)
-  } finally {
-    loading.watchlist = false
-  }
+function showToast(text: string) {
+  toast.value = text
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toast.value = ''
+    toastTimer = null
+  }, 2200)
 }
 
-async function loadQuote(symbol: string) {
-  loading.quote = true
-  try {
-    quote.value = await api.quote(symbol)
-  } catch (exc) {
-    error.value = `行情加载失败：${messageOf(exc)}`
-  } finally {
-    loading.quote = false
-  }
+applyTheme(theme.value)
+watch(theme, (mode) => applyTheme(mode))
+
+function setTheme(mode: ThemeMode) {
+  theme.value = mode
 }
 
-async function loadChart(symbol: string) {
-  loading.chart = true
-  try {
-    chart.value = await api.chart(symbol, period.value, 250)
-  } catch (exc) {
-    error.value = `K线加载失败：${messageOf(exc)}`
-  } finally {
-    loading.chart = false
-  }
+function bareSymbol(symbol: string): string {
+  const match = /^(\d{6})\.(SH|SZ|BJ)$/i.exec(symbol)
+  return match ? match[1] : symbol
 }
 
-async function loadFundamentals(symbol: string) {
-  loading.fundamentals = true
-  try {
-    fundamentals.value = await api.fundamentals(symbol)
-  } catch (exc) {
-    error.value = `基本面加载失败：${messageOf(exc)}`
-  } finally {
-    loading.fundamentals = false
-  }
+function watchlistName(symbol: string): string {
+  const target = bareSymbol(symbol)
+  return watchlist.value.find((item) => bareSymbol(item.symbol) === target)?.name ?? ''
 }
 
-async function loadNotes(symbol: string) {
-  loading.notes = true
-  try {
-    notes.value = await api.notes(symbol)
-  } catch (exc) {
-    error.value = `笔记加载失败：${messageOf(exc)}`
-  } finally {
-    loading.notes = false
-  }
-}
+const detailWatching = computed(() => {
+  const symbol = detailSymbol.value
+  if (!symbol) return false
+  return watchlist.value.some((item) => bareSymbol(item.symbol) === symbol)
+})
 
-async function selectStock(symbol: string) {
-  if (!symbol) return
-  selected.value = symbol
-  error.value = ''
-  researchError.value = ''
-  quote.value = null
-  chart.value = null
-  fundamentals.value = null
-  notes.value = []
-  await Promise.all([
-    loadQuote(symbol),
-    loadChart(symbol),
-    loadFundamentals(symbol),
-    loadNotes(symbol),
-  ])
-}
+const menuWatching = computed(() => {
+  if (!menu.open) return false
+  return watchlist.value.some((item) => bareSymbol(item.symbol) === menu.symbol)
+})
 
-async function addStock(item: SearchResult) {
-  try {
-    await api.addWatchlist(item.symbol, item.name)
-    await loadWatchlist()
-    await selectStock(item.symbol)
-  } catch (exc) {
-    error.value = `添加失败：${messageOf(exc)}`
-  }
-}
-
-async function removeStock(symbol: string) {
-  try {
-    await api.removeWatchlist(symbol)
-    if (selected.value === symbol) {
-      selected.value = null
-      quote.value = null
-      chart.value = null
-      fundamentals.value = null
-      notes.value = []
-    }
-    await loadWatchlist()
-    if (!selected.value && watchlist.value.length) {
-      await selectStock(watchlist.value[0].symbol)
-    }
-  } catch (exc) {
-    error.value = `移除失败：${messageOf(exc)}`
-  }
-}
-
-async function setPeriod(next: 'day' | 'week' | 'month') {
-  if (period.value === next || !selected.value) return
-  period.value = next
-  error.value = ''
-  await loadChart(selected.value)
-}
-
-async function refresh() {
-  if (!selected.value) return
-  error.value = ''
-  await selectStock(selected.value)
-}
-
-async function generateResearch() {
-  if (!selected.value) return
-  loading.research = true
-  researchError.value = ''
-  try {
-    const result = await api.research(selected.value)
-    notes.value = [result.note, ...notes.value.filter((item) => item.id !== result.note.id)]
-  } catch (exc) {
-    researchError.value = messageOf(exc)
-  } finally {
-    loading.research = false
-  }
-}
-
-function onBacktest(query: ScreenQueryPayload) {
-  void backtestRef.value?.runWith(query)
-}
-
-onMounted(async () => {
+async function loadMeta() {
   try {
     meta.value = await api.meta()
   } catch {
     meta.value = null
   }
-  await loadWatchlist()
-  if (watchlist.value.length) {
-    await selectStock(watchlist.value[0].symbol)
+}
+
+async function loadWatchlist() {
+  try {
+    watchlist.value = await api.watchlist()
+  } catch (exc) {
+    error.value = `自选列表加载失败：${messageOf(exc)}`
   }
+}
+
+async function loadOverview() {
+  overviewLoading.value = true
+  overviewError.value = ''
+  try {
+    overview.value = await api.marketOverview()
+  } catch (exc) {
+    overviewError.value = `大盘数据加载失败：${messageOf(exc)}`
+  } finally {
+    overviewLoading.value = false
+  }
+}
+
+async function loadNotes(symbol: string) {
+  const token = ++notesToken
+  notesError.value = ''
+  notes.value = []
+  try {
+    const data = await api.notes(symbol)
+    if (token === notesToken) notes.value = data
+  } catch (exc) {
+    if (token === notesToken) notesError.value = `笔记加载失败：${messageOf(exc)}`
+  }
+}
+
+watch(currentSymbol, (symbol) => {
+  if (symbol) void loadNotes(symbol)
+})
+
+function openDetail(symbol: string, name = '') {
+  const target = bareSymbol(symbol)
+  if (!target) return
+  savedSectionScroll = contentScroll.value?.scrollTop ?? 0
+  currentSymbol.value = target
+  currentName.value = name || watchlistName(target)
+  detailSymbol.value = target
+  menu.open = false
+  error.value = ''
+  void nextTick(() => {
+    contentScroll.value?.scrollTo({ top: 0 })
+  })
+}
+
+function onSelectSymbol(symbol: string) {
+  openDetail(symbol)
+}
+
+function onSelectRef(payload: StockRef) {
+  openDetail(payload.symbol, payload.name)
+}
+
+function closeDetail() {
+  detailSymbol.value = null
+  menu.open = false
+  void nextTick(() => {
+    if (contentScroll.value) contentScroll.value.scrollTop = savedSectionScroll
+  })
+}
+
+function toggleCurrentWatch() {
+  const symbol = detailSymbol.value ?? currentSymbol.value
+  if (!symbol) return
+  void toggleWatch(symbol, currentName.value)
+}
+
+function startResearch() {
+  if (!currentSymbol.value) return
+  detailSymbol.value = null
+  menu.open = false
+  section.value = 'agent'
+  if (!notes.value.length) void loadNotes(currentSymbol.value)
+  void nextTick(() => {
+    contentScroll.value?.scrollTo({ top: 0 })
+  })
+}
+
+function navigate(next: SectionKey) {
+  section.value = next
+  detailSymbol.value = null
+  menu.open = false
+  void nextTick(() => {
+    contentScroll.value?.scrollTo({ top: 0 })
+  })
+}
+
+async function addToWatchlist(payload: StockRef) {
+  if (watchBusy.value) return
+  watchBusy.value = true
+  const target = bareSymbol(payload.symbol)
+  try {
+    await api.addWatchlist(target, payload.name)
+    await loadWatchlist()
+    showToast(`${payload.name || watchlistName(target) || target} 已加入自选`)
+  } catch (exc) {
+    showToast(`加入自选失败：${messageOf(exc)}`)
+  } finally {
+    watchBusy.value = false
+  }
+}
+
+async function removeFromWatchlist(symbol: string) {
+  if (watchBusy.value) return
+  watchBusy.value = true
+  const target = bareSymbol(symbol)
+  const name = watchlistName(target)
+  try {
+    await api.removeWatchlist(target)
+    await loadWatchlist()
+    showToast(`${name || target} 已移出自选`)
+  } catch (exc) {
+    showToast(`移出自选失败：${messageOf(exc)}`)
+  } finally {
+    watchBusy.value = false
+  }
+}
+
+async function toggleWatch(symbol: string, name: string) {
+  const target = bareSymbol(symbol)
+  const exists = watchlist.value.some((item) => bareSymbol(item.symbol) === target)
+  if (exists) await removeFromWatchlist(target)
+  else await addToWatchlist({ symbol: target, name })
+}
+
+async function addFromSearch(item: SearchResult) {
+  await addToWatchlist({ symbol: item.symbol, name: item.name })
+  openDetail(item.symbol, item.name)
+}
+
+function openContext(payload: StockContextPayload) {
+  menu.open = true
+  menu.x = payload.x
+  menu.y = payload.y
+  menu.symbol = bareSymbol(payload.symbol)
+  menu.name = payload.name
+}
+
+function menuDetail() {
+  const { symbol, name } = menu
+  menu.open = false
+  openDetail(symbol, name)
+}
+
+function menuToggleWatch() {
+  const { symbol, name } = menu
+  menu.open = false
+  void toggleWatch(symbol, name)
+}
+
+async function copyCode(symbol: string) {
+  try {
+    if (!navigator.clipboard) throw new Error('clipboard unavailable')
+    await navigator.clipboard.writeText(symbol)
+    showToast(`已复制 ${symbol}`)
+  } catch {
+    try {
+      const area = document.createElement('textarea')
+      area.value = symbol
+      area.style.position = 'fixed'
+      area.style.top = '-1000px'
+      area.style.opacity = '0'
+      document.body.appendChild(area)
+      area.select()
+      document.execCommand('copy')
+      document.body.removeChild(area)
+      showToast(`已复制 ${symbol}`)
+    } catch {
+      showToast('复制失败，请手动选择代码')
+    }
+  }
+}
+
+function menuCopy() {
+  const symbol = menu.symbol
+  menu.open = false
+  void copyCode(symbol)
+}
+
+async function generateResearch() {
+  const symbol = currentSymbol.value
+  if (!symbol || researchLoading.value) return
+  researchLoading.value = true
+  notesError.value = ''
+  try {
+    const result = await api.research(symbol)
+    notes.value = [result.note, ...notes.value.filter((item) => item.id !== result.note.id)]
+  } catch (exc) {
+    notesError.value = messageOf(exc)
+  } finally {
+    researchLoading.value = false
+  }
+}
+
+async function onBacktest(query: ScreenQueryPayload) {
+  section.value = 'backtest'
+  detailSymbol.value = null
+  menu.open = false
+  await nextTick()
+  contentScroll.value?.scrollTo({ top: 0 })
+  if (!backtestSectionRef.value) await nextTick()
+  await backtestSectionRef.value?.runWith(query)
+}
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  if (menu.open) {
+    menu.open = false
+    return
+  }
+  if (detailSymbol.value) closeDetail()
+}
+
+function onPointerDown(event: PointerEvent) {
+  if (!menu.open) return
+  const target = event.target as Node | null
+  const el = document.querySelector('.ctx-menu')
+  if (target && el?.contains(target)) return
+  menu.open = false
+}
+
+function onScroll() {
+  if (menu.open) menu.open = false
+}
+
+function onResize() {
+  if (menu.open) menu.open = false
+}
+
+onMounted(() => {
+  void loadMeta()
+  void loadWatchlist()
+  void loadOverview()
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('pointerdown', onPointerDown)
+  window.addEventListener('scroll', onScroll, true)
+  window.addEventListener('resize', onResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('pointerdown', onPointerDown)
+  window.removeEventListener('scroll', onScroll, true)
+  window.removeEventListener('resize', onResize)
+  if (toastTimer) clearTimeout(toastTimer)
 })
 </script>
 
 <template>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="brand">
-        <h1>PersonalTrading</h1>
-        <span>本地 A 股 / ETF 研究助手</span>
-      </div>
-      <div class="top-meta">
-        <span class="status-dot"></span>
-        <span v-if="meta">{{ meta.model }}</span>
-        <span v-if="meta">· {{ meta.llm_configured ? '模型已配置' : '未配置模型' }}</span>
-        <span v-if="meta">· {{ meta.data_sources.join(' / ') }}</span>
-      </div>
-    </header>
+  <div class="app-frame">
+    <AppSidebar
+      :section="section"
+      :theme="theme"
+      :as-of="overview?.as_of || ''"
+      :watch-count="watchlist.length"
+      @navigate="navigate"
+      @theme="setTheme"
+    />
 
-    <div class="layout">
-      <WatchlistPanel
-        :items="watchlist"
-        :selected="selected"
-        :busy="loading.watchlist"
-        @select="selectStock"
-        @add="addStock"
-        @remove="removeStock"
-      />
-
-      <main class="main">
+    <div ref="contentScroll" class="content-scroll">
+      <main class="content">
         <div v-if="error" class="error-bar">{{ error }}</div>
 
-        <ScreenPanel @select="selectStock" @backtest="onBacktest" />
-
-        <BacktestPanel ref="backtestRef" />
-
-        <TopicPanel />
-
-        <FactorPanel />
-
-        <div v-if="!selected" class="panel empty">
-          <div class="big">从左侧添加一只股票或 ETF</div>
-          <div>支持 A 股 6 位代码、ETF 代码，也可以输入名称或拼音搜索。</div>
+        <div v-show="!detailSymbol" class="section-host">
+          <KeepAlive :max="8">
+            <MarketOverviewPanel
+              v-if="section === 'market'"
+              :data="overview"
+              :loading="overviewLoading"
+              :error="overviewError"
+              @refresh="loadOverview"
+              @select="onSelectRef"
+              @context="openContext"
+            />
+            <WatchlistPanel
+              v-else-if="section === 'watchlist'"
+              :items="watchlist"
+              :selected="currentSymbol"
+              :busy="watchBusy"
+              @select="onSelectSymbol"
+              @add="addFromSearch"
+              @remove="removeFromWatchlist"
+              @context="openContext"
+            />
+            <ScreenPanel
+              v-else-if="section === 'screen'"
+              @select="onSelectSymbol"
+              @backtest="onBacktest"
+              @context="openContext"
+            />
+            <BacktestSection
+              v-else-if="section === 'backtest'"
+              ref="backtestSectionRef"
+              @select="onSelectSymbol"
+              @context="openContext"
+            />
+            <TopicPanel v-else-if="section === 'topic'" @context="openContext" />
+            <FactorPanel v-else-if="section === 'factor'" />
+            <AgentSection
+              v-else-if="section === 'agent'"
+              :symbol="currentSymbol"
+              :name="currentName"
+              :notes="notes"
+              :loading="researchLoading"
+              :error="notesError"
+              @generate="generateResearch"
+            />
+            <OpsPanel v-else />
+          </KeepAlive>
         </div>
 
-        <template v-else>
-          <StockHeader :quote="quote" />
+        <StockDetail
+          v-if="detailSymbol"
+          :symbol="detailSymbol"
+          :name="currentName"
+          :watching="detailWatching"
+          :busy="watchBusy"
+          @close="closeDetail"
+          @toggle-watch="toggleCurrentWatch"
+          @research="startResearch"
+        />
 
-          <section class="panel toolbar">
-            <div class="tabs">
-              <button class="tab" :class="{ active: period === 'day' }" @click="setPeriod('day')">日线</button>
-              <button class="tab" :class="{ active: period === 'week' }" @click="setPeriod('week')">周线</button>
-              <button class="tab" :class="{ active: period === 'month' }" @click="setPeriod('month')">月线</button>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px">
-              <span v-if="loading.chart" class="loading">加载中…</span>
-              <span v-else class="sub-meta" style="margin: 0">{{ selectedName }} · {{ selected }}</span>
-              <button class="btn ghost" :disabled="loading.chart" @click="refresh">刷新</button>
-            </div>
-          </section>
-
-          <section class="panel chart-wrap">
-            <PriceChart :chart="chart" />
-          </section>
-
-          <div class="cards">
-            <IndicatorPanel :latest="chart?.indicators.latest ?? null" />
-            <FundamentalsCard :data="fundamentals" />
-          </div>
-
-          <AgentPanel :symbol="selected" :name="selectedName" />
-
-          <ResearchPanel
-            :symbol="selected"
-            :notes="notes"
-            :loading="loading.research"
-            :error="researchError"
-            @generate="generateResearch"
-          />
-        </template>
-
-        <PaperPanel @select="selectStock" />
-
-        <OpsPanel />
-
-        <div class="footer">
+        <footer class="footer">
           {{ meta?.disclaimer || '目标价与操作建议为模型推算，不保证准确；仅供个人研究使用。' }}
           数据来自新浪财经 / 东方财富公开接口，可能存在延迟或缺失。
-        </div>
+          <span v-if="meta"> · 模型 {{ meta.model }} · {{ meta.llm_configured ? '已配置' : '未配置' }}</span>
+        </footer>
       </main>
     </div>
+
+    <StockContextMenu
+      v-if="menu.open"
+      :x="menu.x"
+      :y="menu.y"
+      :symbol="menu.symbol"
+      :name="menu.name"
+      :watching="menuWatching"
+      @close="menu.open = false"
+      @detail="menuDetail"
+      @toggle-watch="menuToggleWatch"
+      @copy="menuCopy"
+    />
+
+    <Transition name="toast">
+      <div v-if="toast" class="toast" role="status">{{ toast }}</div>
+    </Transition>
   </div>
 </template>

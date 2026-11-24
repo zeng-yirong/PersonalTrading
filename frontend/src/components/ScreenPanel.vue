@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api'
-import type { ScreenField, ScreenQueryPayload, ScreenResult } from '../types'
+import type {
+  ScreenField,
+  ScreenQueryPayload,
+  ScreenResult,
+  StockContextPayload,
+} from '../types'
 
 const emit = defineEmits<{
   (e: 'select', symbol: string): void
   (e: 'backtest', query: ScreenQueryPayload): void
+  (e: 'context', payload: StockContextPayload): void
 }>()
 
 const text = ref('')
@@ -74,6 +80,18 @@ function sendBacktest() {
   const query = result.value?.query
   if (!query) return
   emit('backtest', query)
+}
+
+function openContext(row: Record<string, unknown>, event: MouseEvent) {
+  const symbol = typeof row.symbol === 'string' ? row.symbol : ''
+  if (!symbol) return
+  const name = typeof row.name === 'string' ? row.name : ''
+  emit('context', {
+    symbol,
+    name,
+    x: event.clientX,
+    y: event.clientY,
+  })
 }
 
 onMounted(async () => {
@@ -150,6 +168,7 @@ onMounted(async () => {
               :key="row.symbol"
               class="screen-row"
               @click="emit('select', row.symbol)"
+              @contextmenu.prevent="openContext(row, $event)"
             >
               <td class="mono">{{ row.symbol }}</td>
               <td v-for="field in visibleFields" :key="field">{{ fmt(row[field], field) }}</td>

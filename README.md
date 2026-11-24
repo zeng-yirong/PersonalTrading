@@ -957,6 +957,28 @@ python scripts/check_sources.py --quick  # 只看能力矩阵
 3. 续费后验证：`check_sources.py` 里 `expires_at` 已延后、`sync_market.py status` 显示 Tushare 可用；
 4. 无论是否续费，每天看一眼 `ops.py health`：`daily` 应为 0 滞后，`stk_factor` / `cyq_perf` 可能变空（它们依赖 Tushare）。
 
+## 界面
+
+前端是一套单页应用，左侧固定导航，右侧按模块切换（切换时保留各模块状态）：
+
+| 导航 | 内容 |
+|---|---|
+| 大盘 | 四大指数、涨跌家数、涨跌停、两市成交额、主力净流入、板块领涨/领跌、热榜 |
+| 自选 | 自选股列表，点击进入详情，右键可移除 |
+| 选股 | 自然语言条件 → 全市场筛选（53 字段） |
+| 回测 | 条件回测、净值曲线、历史留档 |
+| 主题 | 主题研究 + 常用问题下拉 |
+| 因子 | 因子评估（panel / Alpha158 / 学术 / GTJA / 基本面） |
+| 推演 | 选中的个股 → 7 位分析师 → 辩论 → 交易员 → 风控 |
+| 运维 | 账本 / 成本 / 数据健康 |
+
+几个交互约定：
+
+- **主题**：右上角切换白天/黑夜，选择存在 `localStorage` 的 `pt-theme`，由 `data-theme` 驱动 CSS 变量；首次加载在挂载前应用，避免闪白。
+- **右键**：任意股票行右键 → 查看详情 / 加入（移出）自选 / 复制代码；加入后列表与详情状态同步。
+- **个股详情**：点击任意股票（热榜、自选、选股结果）进入；顶部是报价与涨跌幅，下面分「分时 / 日K」两个图，再往下是估值与盈利指标、因子快照、近期推演记录；「开始推演」会带着这只股票跳到推演模块。
+- **分时**：走 `/api/stocks/{symbol}/intraday`，主源东财、兜底新浪，结果缓存在 SQLite 的 `intraday_cache`（盘中 60 秒、收盘后 12 小时）。它**不进市场面板**，所以不会影响回测口径；取不到时显示「暂无分时数据」，不会画空图。
+
 ## 配置
 
 所有配置使用 `PERSONALTRADING_` 前缀，读取项目根目录 `.env` 或 `backend/.env`。
@@ -990,11 +1012,14 @@ python scripts/check_sources.py --quick  # 只看能力矩阵
 | DELETE | `/api/watchlist/{symbol}` | 移除自选 |
 | GET | `/api/search?q=...` | 搜索 A 股 / ETF |
 | GET | `/api/stocks/{symbol}/quote` | 实时行情 |
+| GET | `/api/stocks/{symbol}/detail` | 个股详情：报价 / 120 日 K / 因子 / 财务 / 分时 / 近期推演 / 自选状态 |
+| GET | `/api/stocks/{symbol}/intraday` | 最近交易日分钟线（东财 + 新浪兜底，SQLite 缓存） |
 | GET | `/api/stocks/{symbol}/chart?period=day&limit=250` | K 线 + 指标 |
 | GET | `/api/stocks/{symbol}/fundamentals` | 基本面快照 |
 | POST | `/api/stocks/{symbol}/research` | 生成 AI 研究笔记 |
 | GET | `/api/research-notes?symbol=...` | 历史笔记 |
 | GET | `/api/market/status` | 面板覆盖情况 + 数据源可用性 |
+| GET | `/api/market/overview` | 当日大盘：指数、涨跌家数、涨跌停、主力净流入、板块涨跌、热榜 |
 | GET | `/api/market/calendar?start=&end=` | 交易日历 |
 | GET | `/api/market/trade-days?start=&end=&limit=` | 交易日列表 |
 | GET | `/api/market/universe?asset_type=&exchange=&board=` | 全市场标的 |

@@ -249,7 +249,11 @@ onBeforeUnmount(close)
     <div v-if="report" class="markdown agent-report" v-html="render(report)"></div>
 
     <div v-if="!running && !report" class="loading" style="margin-top: 12px">
-      {{ symbol ? '点击「启动研究」，团队会读取面板数据并行推演。' : '先在左侧选择一只标的。' }}
+      {{
+        symbol
+          ? '点击「启动研究」，团队会读取面板数据并行推演。'
+          : '先在自选、大盘或选股里打开一只标的。'
+      }}
     </div>
 
     <details v-if="history.length" class="agent-history">

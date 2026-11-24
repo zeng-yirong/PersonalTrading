@@ -8,13 +8,21 @@ const props = defineProps<{ chart: ChartData | null }>()
 const container = ref<HTMLDivElement | null>(null)
 let instance: echarts.ECharts | null = null
 let observer: ResizeObserver | null = null
+let themeObserver: MutationObserver | null = null
 
-const UP = '#ff5d5d'
-const DOWN = '#23c483'
-const MUTED = '#8fa0b5'
-const BORDER = '#223041'
+function cssColor(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return value || fallback
+}
 
-function buildOption(chart: ChartData) {
+function buildOption(chart: ChartData): echarts.EChartsOption {
+  const UP = cssColor('--up', '#ff5d5d')
+  const DOWN = cssColor('--down', '#23c483')
+  const MUTED = cssColor('--muted', '#8b9cb0')
+  const BORDER = cssColor('--border', '#223041')
+  const PANEL = cssColor('--panel-2', '#15202b')
+  const TEXT = cssColor('--text', '#e7eef6')
+
   const dates = chart.candles.map((item) => item.trade_date)
   const kline = chart.candles.map((item) => [
     item.open ?? 0,
@@ -38,7 +46,7 @@ function buildOption(chart: ChartData) {
     { name: 'MA5', data: chart.indicators.ma5, color: '#f3b34c' },
     { name: 'MA10', data: chart.indicators.ma10, color: '#4da3ff' },
     { name: 'MA20', data: chart.indicators.ma20, color: '#b48cff' },
-    { name: 'MA60', data: chart.indicators.ma60, color: '#8fa0b5' },
+    { name: 'MA60', data: chart.indicators.ma60, color: MUTED },
   ]
 
   return {
@@ -53,15 +61,15 @@ function buildOption(chart: ChartData) {
     },
     tooltip: {
       trigger: 'axis',
-      axisPointer: { type: 'cross', lineStyle: { color: '#3a4b5f' } },
-      backgroundColor: 'rgba(15,21,29,0.96)',
+      axisPointer: { type: 'cross', lineStyle: { color: BORDER } },
+      backgroundColor: PANEL,
       borderColor: BORDER,
-      textStyle: { color: '#e8eef6', fontSize: 12 },
+      textStyle: { color: TEXT, fontSize: 12 },
     },
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
     grid: [
-      { left: 52, right: 18, top: 38, height: '58%' },
-      { left: 52, right: 18, top: '72%', height: '14%' },
+      { left: 52, right: 64, top: 38, height: '58%' },
+      { left: 52, right: 64, top: '72%', height: '14%' },
     ],
     xAxis: [
       {
@@ -97,9 +105,18 @@ function buildOption(chart: ChartData) {
         scale: true,
         gridIndex: 1,
         position: 'right',
+        splitNumber: 3,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: MUTED, fontSize: 10 },
+        axisLabel: {
+          color: MUTED,
+          fontSize: 10,
+          formatter: (value: number) => {
+            if (Math.abs(value) >= 1e8) return `${(value / 1e8).toFixed(1)}亿`
+            if (Math.abs(value) >= 1e4) return `${(value / 1e4).toFixed(0)}万`
+            return String(value)
+          },
+        },
         splitLine: { show: false },
       },
     ],
@@ -129,12 +146,12 @@ function buildOption(chart: ChartData) {
       },
       ...maSeries.map((item) => ({
         name: item.name,
-        type: 'line',
+        type: 'line' as const,
         data: item.data,
         smooth: true,
         showSymbol: false,
         lineStyle: { width: 1.1, color: item.color },
-        emphasis: { focus: 'series' },
+        emphasis: { focus: 'series' as const },
       })),
       {
         name: '成交量',
@@ -166,9 +183,16 @@ onMounted(() => {
     observer = new ResizeObserver(() => instance?.resize())
     observer.observe(container.value)
   }
+  themeObserver = new MutationObserver(() => render())
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  })
 })
 
 onBeforeUnmount(() => {
+  themeObserver?.disconnect()
+  themeObserver = null
   observer?.disconnect()
   instance?.dispose()
   instance = null

@@ -4,14 +4,61 @@ import { marked } from 'marked'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { api } from '../api'
 import type {
+  QuestionGroup,
+  StockContextPayload,
   TopicContext,
   TopicMeta,
   TopicReportDetail,
   TopicReportSummary,
+  TopicStockBrief,
 } from '../types'
+import QuestionSuggest from './QuestionSuggest.vue'
+
+const QUESTION_GROUPS: QuestionGroup[] = [
+  {
+    label: '大盘',
+    questions: [
+      '今天大盘怎么走？',
+      '两市成交额和量能处于什么水平？',
+      '当前市场情绪和涨跌停结构如何？',
+      '大盘指数在均线什么位置？',
+    ],
+  },
+  {
+    label: '行业',
+    questions: [
+      '白酒行业还能拿吗？',
+      '银行板块为什么领涨？',
+      '半导体行业当前景气度如何？',
+      '哪些行业资金流入居前？',
+    ],
+  },
+  {
+    label: '个股',
+    questions: [
+      '这只股票的估值贵不贵？',
+      '当前技术面处于什么位置？',
+      '主力资金最近在买还是卖？',
+      '基本面有没有改善迹象？',
+    ],
+  },
+  {
+    label: '风险',
+    questions: [
+      '现在最大的市场风险是什么？',
+      '如果大盘继续下跌，哪些板块更抗跌？',
+      '当前仓位应该控制在多少？',
+      '两融和资金面有什么风险信号？',
+    ],
+  },
+]
+
+const emit = defineEmits<{
+  (e: 'context', payload: StockContextPayload): void
+}>()
 
 const resultHead = ref<HTMLElement | null>(null)
-const inputEl = ref<HTMLTextAreaElement | null>(null)
+const suggestRef = ref<InstanceType<typeof QuestionSuggest> | null>(null)
 
 const meta = ref<TopicMeta | null>(null)
 const topic = ref('')
@@ -117,7 +164,16 @@ async function loadReports() {
 function fillTopic(value: string) {
   if (loading.value) return
   topic.value = value
-  inputEl.value?.focus()
+  suggestRef.value?.focus()
+}
+
+function openContext(stock: TopicStockBrief, event: MouseEvent) {
+  emit('context', {
+    symbol: stock.symbol,
+    name: stock.name,
+    x: event.clientX,
+    y: event.clientY,
+  })
 }
 
 async function generate() {
@@ -207,15 +263,16 @@ onMounted(() => {
       </div>
     </div>
 
-    <textarea
-      ref="inputEl"
+    <QuestionSuggest
+      ref="suggestRef"
       v-model="topic"
-      class="screen-input"
-      rows="2"
-      maxlength="80"
+      :groups="QUESTION_GROUPS"
+      :rows="2"
+      :maxlength="80"
+      :disabled="loading"
       placeholder="例如：白酒行业还能拿吗 / 大盘会不会继续跌 / 市场情绪现在处于什么位置"
-      @keydown.ctrl.enter="generate"
-    ></textarea>
+      @submit="generate"
+    />
 
     <div v-if="examples.length" class="screen-presets">
       <button
@@ -452,7 +509,11 @@ onMounted(() => {
                           </tr>
                         </thead>
                         <tbody>
-                          <tr v-for="stock in row.leaders" :key="stock.symbol">
+                          <tr
+                            v-for="stock in row.leaders"
+                            :key="stock.symbol"
+                            @contextmenu.prevent="openContext(stock, $event)"
+                          >
                             <td class="mono">{{ stock.symbol }}</td>
                             <td>{{ stock.name }}</td>
                             <td>{{ num(stock.close) }}</td>
@@ -480,7 +541,11 @@ onMounted(() => {
                           </tr>
                         </thead>
                         <tbody>
-                          <tr v-for="stock in row.laggards" :key="stock.symbol">
+                          <tr
+                            v-for="stock in row.laggards"
+                            :key="stock.symbol"
+                            @contextmenu.prevent="openContext(stock, $event)"
+                          >
                             <td class="mono">{{ stock.symbol }}</td>
                             <td>{{ stock.name }}</td>
                             <td>{{ num(stock.close) }}</td>

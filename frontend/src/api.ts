@@ -11,6 +11,8 @@ import type {
   FactorRunResult,
   FactorRunSummary,
   Fundamentals,
+  IntradayData,
+  MarketOverview,
   Meta,
   OpsFingerprint,
   OpsHealth,
@@ -27,6 +29,7 @@ import type {
   ScreenQueryPayload,
   ScreenResult,
   SearchResult,
+  StockDetailData,
   TopicContext,
   TopicMeta,
   TopicReport,
@@ -74,6 +77,12 @@ export const api = {
   chart: (symbol: string, period: string, limit = 250) =>
     request<ChartData>(`/stocks/${symbol}/chart?period=${period}&limit=${limit}`),
   fundamentals: (symbol: string) => request<Fundamentals>(`/stocks/${symbol}/fundamentals`),
+
+  marketOverview: () => request<MarketOverview>('/market/overview'),
+  stockDetail: (symbol: string) =>
+    request<StockDetailData>(`/stocks/${encodeURIComponent(symbol)}/detail`),
+  stockIntraday: (symbol: string) =>
+    request<IntradayData>(`/stocks/${encodeURIComponent(symbol)}/intraday`),
 
   research: (symbol: string) =>
     request<ResearchResponse>(`/stocks/${symbol}/research`, { method: 'POST', body: '{}' }),

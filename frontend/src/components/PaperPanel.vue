@@ -2,7 +2,7 @@
 import * as echarts from 'echarts'
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api } from '../api'
-import type { AgentRunSummary } from '../types'
+import type { AgentRunSummary, StockContextPayload } from '../types'
 
 interface Position {
   id: number
@@ -40,7 +40,10 @@ interface ReviewRow {
   outcome: string | null
 }
 
-const emit = defineEmits<{ (e: 'select', symbol: string): void }>()
+const emit = defineEmits<{
+  (e: 'select', symbol: string): void
+  (e: 'context', payload: StockContextPayload): void
+}>()
 
 const summary = ref<any>(null)
 const positions = ref<Position[]>([])
@@ -159,6 +162,15 @@ function pct(value: number | null): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
 }
 
+function openContext(item: Position, event: MouseEvent) {
+  emit('context', {
+    symbol: item.symbol,
+    name: item.name || '',
+    x: event.clientX,
+    y: event.clientY,
+  })
+}
+
 function onResize() {
   chart?.resize()
 }
@@ -228,7 +240,13 @@ onBeforeUnmount(() => {
           </tr>
         </thead>
         <tbody>
-          <tr class="screen-row" v-for="item in positions" :key="item.id" @click="emit('select', item.symbol)">
+          <tr
+            class="screen-row"
+            v-for="item in positions"
+            :key="item.id"
+            @click="emit('select', item.symbol)"
+            @contextmenu.prevent="openContext(item, $event)"
+          >
             <td class="mono">{{ item.symbol }}</td>
             <td>{{ item.name }}</td>
             <td>{{ fmt(item.shares, 0) }}</td>

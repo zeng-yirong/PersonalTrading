@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { api } from '../api'
-import type { SearchResult, WatchlistItem } from '../types'
+import type { SearchResult, StockContextPayload, WatchlistItem } from '../types'
 
 defineProps<{
   items: WatchlistItem[]
@@ -13,6 +13,7 @@ const emit = defineEmits<{
   (e: 'select', symbol: string): void
   (e: 'add', item: SearchResult): void
   (e: 'remove', symbol: string): void
+  (e: 'context', payload: StockContextPayload): void
 }>()
 
 const query = ref('')
@@ -59,12 +60,21 @@ function remove(symbol: string, event: MouseEvent) {
   event.stopPropagation()
   emit('remove', symbol)
 }
+
+function openContext(item: WatchlistItem, event: MouseEvent) {
+  emit('context', {
+    symbol: item.symbol,
+    name: item.name,
+    x: event.clientX,
+    y: event.clientY,
+  })
+}
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside class="panel card watch-panel">
     <div class="sidebar-head">
-      <h2>自选股</h2>
+      <h2>自选股<span v-if="items.length" class="sub-meta" style="margin: 0 0 0 6px">{{ items.length }}</span></h2>
       <div class="search-box">
         <input
           v-model="query"
@@ -105,6 +115,7 @@ function remove(symbol: string, event: MouseEvent) {
         class="watch-item"
         :class="{ active: item.symbol === selected }"
         @click="emit('select', item.symbol)"
+        @contextmenu.prevent="openContext(item, $event)"
       >
         <div class="info">
           <div class="name">{{ item.name }}</div>
