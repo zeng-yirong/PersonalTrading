@@ -134,8 +134,7 @@ def list_assets(
             return {
                 "asset": asset,
                 "as_of": as_of.isoformat() if as_of else None,
-                "note": "指数列表只含每日更新的主要指数（上证/深成/创业板/沪深300/中证500/中证1000）；"
-                        "其余指数是历史回填，未纳入每日更新。",
+                "note": "指数列表只含每日更新的 12 个主要指数（宽基 + 科创/创业板/北证）；其余指数为历史回填，未纳入每日更新。",
                 "total": int(total or 0),
                 "page": page,
                 "page_size": page_size,

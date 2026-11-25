@@ -161,7 +161,7 @@ def test_detail_survives_missing_optional_tables(panel, monkeypatch):
 def test_overview_shape(panel):
     payload = overview.overview()
     assert payload["as_of"] == panel[-1].isoformat()
-    assert payload["indices"][0]["label"] == "沪深300"
+    assert "沪深300" in {item["label"] for item in payload["indices"]}
     assert payload["breadth"]["stock"]["up"] == 2
     assert payload["breadth"]["hk"] is None
     assert payload["limit"]["up"] == 1
