@@ -14,6 +14,7 @@ from typing import Annotated, Any, TypedDict
 from app.agents import context as ctxmod
 from app.agents import prompts
 from app.agents.llm import ChatClient, LLMError
+from app import skills
 
 
 def _merge_dict(left: dict[str, Any] | None, right: dict[str, Any] | None) -> dict[str, Any]:
@@ -202,7 +203,9 @@ def _make_trader(client: ChatClient):
             f"【辩论摘要】\n{_debate_text(state, limit=4)}"
         )
         try:
-            payload = await client.complete_json(prompts.SYSTEM_TRADER, user, max_tokens=1800)
+            payload = await client.complete_json(
+                prompts.SYSTEM_TRADER + skills.prompt_suffix("trader"), user, max_tokens=1800
+            )
         except LLMError as exc:
             return {"errors": [f"trader: {exc}"]}
         return {"proposal": payload}
@@ -267,7 +270,9 @@ def _make_risk_manager(client: ChatClient):
             f"【三位风控委员意见】\n{review_text or '（无）'}"
         )
         try:
-            payload = await client.complete_json(prompts.SYSTEM_RISK_MANAGER, user)
+            payload = await client.complete_json(
+                prompts.SYSTEM_RISK_MANAGER + skills.prompt_suffix("risk_manager"), user
+            )
         except LLMError as exc:
             return {
                 "errors": [f"risk_manager: {exc}"],

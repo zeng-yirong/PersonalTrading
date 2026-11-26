@@ -266,6 +266,7 @@ def _migrate(conn) -> None:
     migrations = (
         ("backtest_runs", "source_run_id", "INTEGER"),
         ("topic_reports", "source_run_id", "INTEGER"),
+        ("agent_runs", "skill_version", "TEXT"),
     )
     for table, column, kind in migrations:
         existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}

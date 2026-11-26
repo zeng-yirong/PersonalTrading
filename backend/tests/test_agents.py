@@ -85,14 +85,13 @@ class FakeClient:
         if system == prompts.SYSTEM_RESEARCH_MANAGER:
             return {"verdict": "偏多", "leaning_score": 20, "winner": "多头",
                     "reasoning": "多头占优", "key_disagreements": ["d1"], "confidence": 55}
-        if system == prompts.SYSTEM_TRADER:
+        if system == prompts.SYSTEM_TRADER or system.startswith(prompts.SYSTEM_TRADER):
             return {"action": "持有", "position_pct": 40, "conviction": 55,
                     "target_price": 1650, "stop_price": "1425 元",
                     "rationale": "r", "entry_zone": "10.0-10.5", "stop_condition": "9.5",
                     "horizon": "4 周", "what_would_change_my_mind": "w"}
         if system.startswith("你是风控负责人"):
-            return {"decision": "批准", "final_position_pct": 30, "rationale": "ok",
-                    "adjustments": [], "monitor": ["m1"], "confidence": 60}
+            return {"decision": "批准", "final_position_pct": 30, "rationale": "ok",                    "adjustments": [], "monitor": ["m1"], "confidence": 60}
         if system.startswith("你是风控委员"):
             return {"persona": "x", "concerns": ["c1"], "position_advice_pct": 30,
                     "verdict": "同意", "reasoning": "r"}

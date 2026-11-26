@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 
 from app.agents import runner, store as agent_store
 from app.agents.llm import ChatClient
+from app import skills
 from app.config import settings
 from app.data import store as panel_store
 from app.services.symbols import normalize_code
@@ -40,6 +41,8 @@ async def status() -> dict:
         "model": client.model,
         "debate_rounds": settings.agent_debate_rounds,
         "panel_ready": panel_store.is_ready(),
+        "skill_version": skills.label(),
+        "skills": skills.describe(),
         "coverage": {
             key: (value.isoformat() if hasattr(value, "isoformat") else value)
             for key, value in panel_store.get_coverage().items()

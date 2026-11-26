@@ -1,0 +1,12 @@
+{
+  "skills": [
+    {
+      "id": "equity-desk",
+      "version": "v0.1",
+      "status": "champion",
+      "roles": ["trader", "risk_manager"],
+      "file": "equity-desk.md",
+      "summary": "单股推演的执行纪律：仓位与信心/赔率挂钩、目标价必须有锚、止损必须可执行、失效条件必须明天能验证。"
+    }
+  ]
+}

@@ -15,11 +15,13 @@ from datetime import datetime
 from typing import Any, AsyncIterator, Optional
 
 from app.agents import context as ctxmod
+from app.agents import guards
 from app.agents import store as agent_store
 from app.agents.graph import NODE_LABELS, build_graph
 from app.agents.llm import ChatClient
 from app.config import settings
 from app.services.symbols import normalize_code
+from app import skills
 
 DISCLAIMER = (
     "目标价、期望收益与买卖动作均为模型基于本地面板的推算，不保证准确；"
@@ -90,7 +92,8 @@ def build_report(state: dict[str, Any], ctx: dict[str, Any], usage: dict[str, in
         "",
         f"> 截止 {ctx['as_of']} ｜ 收盘 {_fmt(price['last_close'])} ｜ "
         f"模型 `{state.get('model', '')}` ｜ 辩论 {state.get('rounds', 0)} 轮 ｜ "
-        f"调用 {usage.get('calls', 0)} 次 / {usage.get('total_tokens', 0)} tokens",
+        f"调用 {usage.get('calls', 0)} 次 / {usage.get('total_tokens', 0)} tokens"
+        + (f" ｜ 技能 `{state.get('skill_version')}`" if state.get("skill_version") else ""),
         "",
         "## 结论",
         "",
@@ -235,6 +238,13 @@ def build_report(state: dict[str, Any], ctx: dict[str, Any], usage: dict[str, in
     if rank:
         lines.append(f"- 热度：同花顺热榜第 {int(rank)} 名")
     lines.append("")
+    guards_found = guards.check_proposal(proposal, price.get("last_close"))
+    guards_found += guards.check_verdict(verdict, proposal)
+    if guards_found:
+        lines.extend(["## 决策体检（自动校验）", ""])
+        for item in guards_found:
+            lines.append(f"- {item}")
+        lines.append("")
     if errors:
         lines.extend(["## 运行异常", ""])
         for item in errors:
@@ -272,10 +282,11 @@ async def stream_research(
         return
 
     name = ctx["profile"]["name"]
+    skill_label = skills.label()
     run_id = None
     if persist:
         run_id = await asyncio.to_thread(
-            agent_store.create_run, code, name, client.model, rounds, ctx
+            agent_store.create_run, code, name, client.model, rounds, ctx, skill_label
         )
 
     yield {
@@ -286,6 +297,7 @@ async def stream_research(
         "as_of": ctx["as_of"],
         "model": client.model,
         "rounds": rounds,
+        "skill_version": skill_label,
     }
 
     queue: asyncio.Queue = asyncio.Queue()
@@ -299,6 +311,7 @@ async def stream_research(
         "debate": [],
         "errors": [],
         "model": client.model,
+        "skill_version": skill_label,
     }
 
     task = asyncio.create_task(graph.ainvoke(state))

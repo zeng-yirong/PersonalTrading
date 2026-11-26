@@ -20,12 +20,22 @@ def create_run(
     model: str,
     rounds: int,
     context: dict[str, Any],
+    skill_version: str = "",
 ) -> int:
     with connection() as conn:
         cursor = conn.execute(
-            "INSERT INTO agent_runs(symbol, name, status, model, rounds, started_at, context_json) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?)",
-            (symbol, name, "running", model, rounds, now_iso(), json.dumps(context, ensure_ascii=False, default=str)),
+            "INSERT INTO agent_runs(symbol, name, status, model, rounds, started_at, "
+            "context_json, skill_version) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                symbol,
+                name,
+                "running",
+                model,
+                rounds,
+                now_iso(),
+                json.dumps(context, ensure_ascii=False, default=str),
+                skill_version or None,
+            ),
         )
         return int(cursor.lastrowid)
 
@@ -105,6 +115,7 @@ def _run_row_to_dict(row: Any, *, include_report: bool = False) -> dict[str, Any
         },
         "verdict": json.loads(row["verdict"]) if row["verdict"] else None,
         "error": row["error"],
+        "skill_version": row["skill_version"] if "skill_version" in row.keys() else None,
     }
     if include_report:
         item["report"] = row["report"]
