@@ -26,6 +26,11 @@ TABLES: tuple[tuple[str, str, int, str], ...] = (
     ("sw_daily", "申万行业", 0, "trade_date"),
     ("limit_cpt_list", "涨停概念", 1, "trade_date"),
     ("ths_hot", "热榜", 1, "trade_date"),
+    ("dc_hot", "东财热榜", 1, "trade_date"),
+    ("top_list", "龙虎榜", 0, "trade_date"),
+    ("top_inst", "龙虎榜机构", 0, "trade_date"),
+    ("hsgt_top10", "沪深股通十大", 0, "trade_date"),
+    ("block_trade", "大宗交易", 0, "trade_date"),
     ("fina_indicator_vip", "财务指标", 120, "ann_date"),
 )
 

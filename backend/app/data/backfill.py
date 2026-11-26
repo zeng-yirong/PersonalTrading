@@ -602,6 +602,61 @@ def refresh_indices(trade_date: Optional[date] = None) -> list[dict[str, Any]]:
     return results
 
 
+def daily_specs() -> list[DatasetSpec]:
+    """Datasets the ``day`` command pulls for a single trade date.
+
+    ``daily`` marks intent, but the pull shape still has to support a one-date
+    request: ``date`` / ``period`` modes take a single date param, and
+    ``daily_date`` marks code-mode specs the API can also serve per date.
+    """
+    return [
+        spec
+        for spec in specs_for()
+        if spec.daily and (spec.mode in {"date", "period"} or spec.daily_date)
+    ]
+
+
+def _fill_late_publisher(
+    spec: DatasetSpec,
+    target: date,
+    provider,
+    days: Optional[int] = None,
+) -> list[dict[str, Any]]:
+    """Re-ask the previous trading days when today's pull came back empty.
+
+    ``margin_detail`` is published T+1 and ``ths_hot`` / ``dc_hot`` often land
+    after the evening job. Without this, the ``day`` command — which only ever
+    asks for "today" — would leave them one day behind forever.
+    """
+    count = days if days is not None else spec.retry_days
+    if count <= 0:
+        return []
+    recent = store.get_trade_days(target - timedelta(days=count * 3 + 5), target - timedelta(days=1))
+    filled: list[dict[str, Any]] = []
+    for day in list(recent)[-count:]:
+        params = {spec.date_param: day.strftime("%Y%m%d")}
+        try:
+            rows = provider.query(spec.api, params, spec.fields)
+        except ProviderError:
+            continue
+        if not rows:
+            continue
+        rows, _dropped = _drop_rows_missing_keys(rows, spec.keys)
+        if not rows:
+            continue
+        if spec.name in CORE_WRITERS:
+            written = write_core(spec.name, rows)
+        else:
+            columns, types = infer_schema(rows, spec)
+            store.ensure_dataset_table(spec.name, types, spec.keys)
+            written = store.write_dataset(
+                spec.name, columns, spec.keys, normalize_rows(rows, columns, types)
+            )
+        store.log_sync(f"daily:{spec.name}", datetime.now(), written, "ok", f"{day} 回补")
+        filled.append({"date": day.isoformat(), "rows": written})
+    return filled
+
+
 def update_today(
     trade_date: Optional[date] = None,
     progress: Optional[Callable[[dict[str, Any]], None]] = None,
@@ -625,11 +680,7 @@ def update_today(
         raise BackfillError(f"Tushare 不可用：{reason}")
     store.init_schema()
 
-    specs = [
-        spec
-        for spec in specs_for()
-        if spec.daily and (spec.mode in {"date", "period"} or spec.daily_date)
-    ]
+    specs = daily_specs()
     results: list[dict[str, Any]] = []
     for spec in specs:
         started = datetime.now()
@@ -643,7 +694,14 @@ def update_today(
             )
             continue
         if not rows:
-            results.append({"dataset": spec.name, "rows": 0, "status": "empty"})
+            results.append(
+                {
+                    "dataset": spec.name,
+                    "rows": 0,
+                    "status": "empty",
+                    "filled": _fill_late_publisher(spec, target, provider),
+                }
+            )
             continue
         rows, _dropped = _drop_rows_missing_keys(rows, spec.keys)
         if not rows:

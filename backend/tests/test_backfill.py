@@ -286,3 +286,91 @@ def test_backfill_is_idempotent(panel):
     with store.session(read_only=True) as conn:
         count = conn.execute("SELECT COUNT(*) FROM daily").fetchone()[0]
     assert count == 1  # upserted on (symbol, trade_date), not duplicated
+
+
+# ------------------------------------------------------------------- daily set
+# 2026-11-26: these six sat at 2026-11-20 for four trading days because they were
+# registered but never marked daily, so nothing ever pulled them again. The
+# sentiment and event agents read them, so a silent stop is a data-quality bug.
+STALE_ONCE = (
+    "top_list",
+    "top_inst",
+    "hsgt_top10",
+    "block_trade",
+    "dc_hot",
+    "limit_cpt_list",
+)
+
+
+def test_sentiment_and_event_datasets_are_in_the_daily_set():
+    names = {spec.name for spec in backfill.daily_specs()}
+    assert set(STALE_ONCE) <= names
+
+
+def test_every_daily_dataset_can_serve_one_date():
+    """A spec marked daily must be fetchable with a single date parameter."""
+    for spec in backfill.daily_specs():
+        assert spec.mode in {"date", "period"} or spec.daily_date, spec.name
+
+
+# --------------------------------------------------------- late publishers
+class LatePublisher:
+    """Returns nothing for the requested date, data for the days before it."""
+
+    name = "late"
+
+    def __init__(self, empty: tuple[str, ...] = ()) -> None:
+        self.calls: list[str] = []
+        self.empty = empty
+
+    def query(self, api, params, fields=""):
+        day = params["trade_date"]
+        self.calls.append(day)
+        if day in self.empty:
+            return []
+        return [{"ts_code": "600519.SH", "trade_date": day, "rzye": 100.0}]
+
+
+def test_late_publisher_is_refilled_from_previous_days(panel):
+    """`margin_detail` is T+1: a "today only" pull would stay a day behind forever."""
+    store.upsert_calendar(
+        [(date(2026, 1, 5), True), (date(2026, 1, 6), True), (date(2026, 1, 7), True)],
+        "test",
+    )
+    spec = DatasetSpec(
+        name="margin_detail",
+        api="margin_detail",
+        label="融资融券",
+        mode="date",
+        daily=True,
+        retry_days=2,
+    )
+    provider = LatePublisher()
+    filled = backfill._fill_late_publisher(spec, date(2026, 1, 7), provider)
+
+    assert provider.calls == ["20260105", "20260106"]  # never re-asks today
+    assert [entry["date"] for entry in filled] == ["2026-01-05", "2026-01-06"]
+    with store.session(read_only=True) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM margin_detail").fetchone()[0] == 2
+
+
+def test_late_refill_is_skipped_when_disabled_or_still_empty(panel):
+    store.upsert_calendar(
+        [(date(2026, 1, 5), True), (date(2026, 1, 6), True), (date(2026, 1, 7), True)],
+        "test",
+    )
+    plain = DatasetSpec(name="top_list", api="top_list", label="龙虎榜", mode="date")
+    assert backfill._fill_late_publisher(plain, date(2026, 1, 7), LatePublisher()) == []
+
+    late = DatasetSpec(
+        name="margin_detail",
+        api="margin_detail",
+        label="融资融券",
+        mode="date",
+        daily=True,
+        retry_days=2,
+    )
+    provider = LatePublisher(empty=("20260105", "20260106"))
+    assert backfill._fill_late_publisher(late, date(2026, 1, 7), provider) == []
+
+

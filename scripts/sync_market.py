@@ -196,11 +196,19 @@ def cmd_day(args: argparse.Namespace) -> int:
     store.init_schema()
     results = backfill.update_today(target)
     total = 0
+    backfilled = 0
     for item in results:
         total += item["rows"]
         note = f"  ← {item['error']}" if item.get("error") else ""
+        filled = item.get("filled") or []
+        if filled:
+            backfilled += sum(entry["rows"] for entry in filled)
+            note = "  ← 今日未发布；已回补 " + "、".join(
+                f"{entry['date']} {entry['rows']} 行" for entry in filled
+            )
         print(f"  {item['dataset']:<22} {item['rows']:>7} 行 {item['status']}{note}")
-    print(f"合计 {total} 行")
+    suffix = f"（另回补前几日 {backfilled} 行）" if backfilled else ""
+    print(f"合计 {total} 行{suffix}")
     return 0
 
 

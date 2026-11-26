@@ -32,6 +32,7 @@ class DatasetSpec:
     keys: tuple[str, ...] = ("ts_code", "trade_date")
     daily: bool = False       # included in the "update today" command
     daily_date: bool = False  # code-mode spec the API can also serve by trade_date
+    retry_days: int = 0       # late publisher: when today is empty, re-ask the last N days
     priority: int = 100       # lower runs first in a full backfill
     start_year: int = 2010    # earliest year worth backfilling
     note: str = ""
@@ -128,22 +129,27 @@ DATASETS: tuple[DatasetSpec, ...] = (
         label="融资融券",
         mode="date",
         daily=True,
+        retry_days=2,
         priority=24,
         start_year=2015,
+        note="T+1 发布，且常在 20:30 仍为空；今日为空时回补前 2 个交易日",
     ),
     DatasetSpec(
         name="top_list",
         api="top_list",
         label="龙虎榜",
         mode="date",
+        daily=True,
         priority=30,
         start_year=2015,
+        note="收盘后才发布；18:00 取不到由 20:30 补数，health 会显示滞后",
     ),
     DatasetSpec(
         name="top_inst",
         api="top_inst",
         label="龙虎榜机构",
         mode="date",
+        daily=True,
         priority=31,
         start_year=2015,
         keys=("trade_date", "ts_code", "exalter"),
@@ -153,6 +159,7 @@ DATASETS: tuple[DatasetSpec, ...] = (
         api="hsgt_top10",
         label="沪深股通十大",
         mode="date",
+        daily=True,
         priority=32,
         start_year=2018,
         keys=("trade_date", "ts_code"),
@@ -172,6 +179,7 @@ DATASETS: tuple[DatasetSpec, ...] = (
         api="block_trade",
         label="大宗交易",
         mode="date",
+        daily=True,
         priority=41,
         start_year=2015,
         keys=("trade_date", "ts_code", "buyer", "seller"),
@@ -381,28 +389,34 @@ DATASETS: tuple[DatasetSpec, ...] = (
         label="同花顺热榜",
         mode="date",
         daily=True,
+        retry_days=1,
         priority=25,
         start_year=2025,
         keys=("trade_date", "ts_code", "data_type"),
-        note="盘中热度排名，是 A 股“社媒关注度”的可得代理",
+        note="盘中热度排名，是 A 股“社媒关注度”的可得代理；收盘后常晚于日更发布",
     ),
     DatasetSpec(
         name="dc_hot",
         api="dc_hot",
         label="东财热榜",
         mode="date",
+        daily=True,
+        retry_days=1,
         priority=26,
         start_year=2025,
         keys=("trade_date", "ts_code", "data_type"),
+        note="盘中更新，收盘后取当日最后一版",
     ),
     DatasetSpec(
         name="limit_cpt_list",
         api="limit_cpt_list",
         label="涨停概念榜",
         mode="date",
+        daily=True,
         priority=27,
         start_year=2025,
         keys=("trade_date", "ts_code"),
+        note="收盘后发布，与龙虎榜同一批",
     ),
     DatasetSpec(
         name="broker_recommend",

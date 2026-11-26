@@ -74,6 +74,29 @@ def test_health_flags_a_partial_day(panel):
     assert "digest" in payload["fingerprint"]
 
 
+def test_health_flags_a_stale_heat_table(panel):
+    """A table that silently stops updating must surface as an issue.
+
+    `dc_hot` sat at 2026-11-20 for four trading days while the sentiment agent
+    kept reading it, and health only watched 13 tables so nobody noticed.
+    """
+    store.ensure_dataset_table(
+        "dc_hot",
+        {"ts_code": "VARCHAR", "trade_date": "DATE", "data_type": "VARCHAR"},
+        ("ts_code", "trade_date", "data_type"),
+    )
+    store.write_dataset(
+        "dc_hot",
+        ["ts_code", "trade_date", "data_type"],
+        ("ts_code", "trade_date", "data_type"),
+        [{"ts_code": "600519.SH", "trade_date": panel[0], "data_type": "hot"}],
+    )
+    payload = health.snapshot()
+    row = next(item for item in payload["tables"] if item["table"] == "dc_hot")
+    assert row["status"] == "stale"
+    assert any("东财热榜" in issue for issue in payload["issues"])
+
+
 # ----------------------------------------------------------------------- ledger
 def _seed_records() -> None:
     with connection() as conn:
