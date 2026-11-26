@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as echarts from 'echarts'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import { api } from '../api'
 import type {
   BacktestMeta,
@@ -335,6 +335,13 @@ onBeforeUnmount(() => {
 })
 
 defineExpose({ runWith })
+onDeactivated(() => {
+  chart?.dispose()
+  chart = null
+})
+onActivated(() => {
+  void nextTick(renderChart)
+})
 </script>
 
 <template>

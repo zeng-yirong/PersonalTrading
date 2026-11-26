@@ -35,6 +35,7 @@ from app.services.symbols import exchange, normalize_code
 DATE_PATTERN = re.compile(r"^\d{8}$")
 FLUSH_PARTS = 8
 MARKET_CLOSE = dtime(15, 5)
+PUBLISH_WINDOW_DAYS = 3         # 空分段超过这个天数才允许记成"已完成"
 # 剩余交易日少于这个数就顺手刷新日历：20 个交易日是 T+20 复盘的窗口。
 CALENDAR_MIN_DAYS = 25
 
@@ -75,6 +76,18 @@ class Part:
 
 
 # --------------------------------------------------------------------- schema
+def _past_publish_window(key: str, days: int = PUBLISH_WINDOW_DAYS) -> bool:
+    """空分段能不能封口：只有明显过了发布窗口的日期才记账。
+
+    不是日期的键（代码 / 月份 / ``all``）按已完成处理——它们不适用"晚发布"。
+    """
+    try:
+        day = date.fromisoformat(str(key)[:10])
+    except ValueError:
+        return True
+    return (date.today() - day).days > days
+
+
 def _as_date_value(field_name: str, value: Any) -> Optional[date]:
     if value in (None, "", 0):
         return None
@@ -279,6 +292,17 @@ def build_parts(
         return [Part("all", dict(spec.fixed))]
 
     if spec.mode == "date":
+        if spec.date_param != "trade_date":
+            # 公告类接口按**自然日**取：分红公告常落在周末（例如 2026-10-31 是周六），
+            # 只按交易日分段会把它们全部漏掉。代价是多约 50% 的请求。
+            span = (today - start).days + 1
+            return [
+                Part(
+                    (start + timedelta(days=offset)).isoformat(),
+                    {spec.date_param: (start + timedelta(days=offset)).strftime("%Y%m%d")},
+                )
+                for offset in range(span)
+            ]
         days = store.get_trade_days(start, today)
         if not days:
             raise BackfillError("交易日历为空，请先运行 `sync_market.py calendar`")
@@ -402,12 +426,17 @@ def _run_dataset(
                 errors.append(f"{part.key}: {exc}")
                 continue
             if not rows:
-                marks.append((part.key, 0, True))
+                # 上游当天还没发布时会返回空。空分段不能立刻记成"已完成"，否则
+                # 这个日期就永久缺了（2026-11-20 的两融就是这样丢的）。只有明显
+                # 过了发布窗口的日期才允许封口，近几天的留待下次重试。
+                if _past_publish_window(part.key):
+                    marks.append((part.key, 0, True))
                 continue
             rows, dropped = _drop_rows_missing_keys(rows, spec.keys)
             dropped_rows += dropped
             if not rows:
-                marks.append((part.key, 0, True))
+                if _past_publish_window(part.key):
+                    marks.append((part.key, 0, True))
                 continue
             if is_core:
                 buffer.extend(rows)

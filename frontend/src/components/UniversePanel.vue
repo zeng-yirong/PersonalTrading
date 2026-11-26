@@ -227,6 +227,11 @@ watch(asset, () => {
       </div>
     </div>
 
+    <div v-if="asset === 'hk'" class="warning-bar universe-note">
+      港股个股数据源未开通（Tushare 的 <code>hk_daily</code> / <code>ggt_top10</code> 未购买），
+      这里只有恒生等全球指数的行情，<strong>不是港股全市场</strong>。看港股个股请等数据源接入。
+    </div>
+
     <div class="universe-search">
       <input
         v-model="query"

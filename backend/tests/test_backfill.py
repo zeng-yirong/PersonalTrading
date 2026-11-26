@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -311,6 +311,64 @@ def test_every_daily_dataset_can_serve_one_date():
     """A spec marked daily must be fetchable with a single date parameter."""
     for spec in backfill.daily_specs():
         assert spec.mode in {"date", "period"} or spec.daily_date, spec.name
+
+
+# -------------------------------------------------------- 空分段不该被封口
+class NothingProvider:
+    """Returns nothing for every part, like an upstream that has not published yet."""
+
+    name = "nothing"
+
+    def query(self, api, params, fields=""):
+        return []
+
+
+def test_empty_part_for_today_is_left_pending(panel):
+    """上游今天没发布 → 不能记成已完成，否则这个日期就永久缺了。"""
+    today = date.today()
+    store.upsert_calendar([(today, True)], "test")
+    spec = DatasetSpec(name="top_list", api="top_list", label="龙虎榜", mode="date")
+
+    result = backfill._run_dataset(
+        spec, backfill.build_parts(spec, years=1, today=today), NothingProvider(), 1, None
+    )
+
+    assert result["status"] == "ok"
+    assert store.dataset_progress("top_list") == {}      # 明天还会重试这一天
+
+
+def test_empty_part_past_the_window_is_sealed(panel):
+    """过了发布窗口仍然为空，才允许封口，避免每次回填都重跑历史空日期。"""
+    old = date.today() - timedelta(days=10)
+    store.upsert_calendar([(old, True)], "test")
+    spec = DatasetSpec(name="top_list", api="top_list", label="龙虎榜", mode="date")
+
+    backfill._run_dataset(
+        spec, backfill.build_parts(spec, years=1, today=date.today()), NothingProvider(), 1, None
+    )
+
+    assert store.dataset_progress("top_list")[old.isoformat()][1] is True
+
+
+def test_announcement_datasets_cover_weekends(panel):
+    """分红按 ann_date 分段，周末公告必须落在分段里，否则永远抓不到。"""
+    from app.data.datasets import BY_NAME
+
+    parts = backfill.build_parts(BY_NAME["dividend"], years=1, today=date(2026, 11, 26))
+    keys = [part.key for part in parts]
+    assert "2026-11-21" in keys and "2026-11-22" in keys      # 周六 / 周日
+    assert len(keys) == 366                                    # 自然日，不是交易日
+
+
+def test_trade_day_datasets_still_use_the_calendar(panel):
+    from app.data.datasets import BY_NAME
+
+    store.upsert_calendar(
+        [(date(2026, 11, 20), True), (date(2026, 11, 21), False), (date(2026, 11, 23), True)],
+        "test",
+    )
+    parts = backfill.build_parts(BY_NAME["daily"], years=1, today=date(2026, 11, 23))
+    assert "2026-11-21" not in [part.key for part in parts]
 
 
 # --------------------------------------------------------- late publishers

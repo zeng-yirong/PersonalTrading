@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as echarts from 'echarts'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import type { IntradayData } from '../types'
 
 const props = defineProps<{
@@ -215,6 +215,13 @@ onBeforeUnmount(() => {
   themeObserver?.disconnect()
   themeObserver = null
   dispose()
+})
+onDeactivated(() => {
+  instance?.dispose()
+  instance = null
+})
+onActivated(() => {
+  void nextTick(render)
 })
 </script>
 

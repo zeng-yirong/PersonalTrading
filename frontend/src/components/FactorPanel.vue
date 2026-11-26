@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as echarts from 'echarts'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
 import type {
   FactorIcPoint,
@@ -466,6 +466,12 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   disposeCharts()
+})
+onDeactivated(() => {
+  disposeCharts()
+})
+onActivated(() => {
+  void nextTick(renderCharts)
 })
 </script>
 

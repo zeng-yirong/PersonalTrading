@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as echarts from 'echarts'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
 import type {
   OpsChain,
@@ -377,6 +377,15 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   disposeChart()
+})
+onDeactivated(() => {
+  chart?.dispose()
+  chart = null
+})
+onActivated(() => {
+  void nextTick(() => {
+    if (tab.value === 'cost') renderUsageChart()
+  })
 })
 </script>
 

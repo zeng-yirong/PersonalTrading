@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as echarts from 'echarts'
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import type { ChartData } from '../types'
 
 const props = defineProps<{ chart: ChartData | null }>()
@@ -206,6 +206,15 @@ watch(
   },
   { deep: true },
 )
+// KeepAlive 下切走模块不会触发 onBeforeUnmount，画布会一直占着显存：
+// 失活时释放，回来时按当前数据重画。
+onDeactivated(() => {
+  instance?.dispose()
+  instance = null
+})
+onActivated(() => {
+  void nextTick(render)
+})
 </script>
 
 <template>

@@ -3700,3 +3700,9 @@ details.note summary {
   font-size: 12px;
   margin: 6px 0;
 }
+/* ---------- 全市场：港股数据源未开通的说明 ---------- */
+.universe-note {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 8px 0;
+}

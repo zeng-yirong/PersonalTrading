@@ -1,0 +1,20 @@
+PersonalTrading — 个人自用投研工具，保留所有权利
+
+Copyright (c) 2026 zeng-yirong@outlook.com
+
+本项目是作者个人的本地研究工具，**未开源**，也未选择开源许可证。除作者本人外，
+任何人对本仓库内容不享有复制、修改、分发、再许可或商业使用的授权；如需引用，
+请先取得作者书面同意。
+
+---
+
+PersonalTrading — personal research tool. All rights reserved.
+
+This repository is a private, unpublished work by the author. No permission is
+granted to copy, modify, distribute, sublicense or use it commercially without
+prior written consent. The absence of an open-source licence is intentional.
+
+---
+
+第三方数据与依赖不受本声明影响：Tushare / 新浪财经 / 东方财富的行情数据版权归其
+各自所有者，使用须遵守其服务条款；PyPI 与 npm 依赖各自的许可证见其仓库。

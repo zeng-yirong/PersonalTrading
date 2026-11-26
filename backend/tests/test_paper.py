@@ -59,6 +59,27 @@ def paper(tmp_path, monkeypatch):
     return store
 
 
+def test_split_does_not_fake_a_loss(paper):
+    """10 元买 100 股，1 拆 2（价 5、因子 2）后市值应仍是 1 万，不是腰斩。"""
+    store.upsert_daily(
+        [{"symbol": "000001", "trade_date": "2026-11-30", "close": 10.0,
+          "adj_factor": 1.0, "amount": 1e8}],
+        "test",
+    )
+    service.ensure_account()
+    service.trade("000001", "buy", shares=100)
+    store.upsert_daily(
+        [{"symbol": "000001", "trade_date": "2026-12-01", "close": 5.0,
+          "adj_factor": 2.0, "amount": 1e8}],
+        "test",
+    )
+
+    position = service.positions()[0]
+    assert position["price"] == pytest.approx(10.0)          # 5 × 2 / 1
+    assert position["market_value"] == pytest.approx(1000.0)
+    assert position["pnl_pct"] > -1.0                        # 只亏手续费
+
+
 def test_buy_charges_fees_and_updates_cash(paper):
     account = service.ensure_account()
     result = service.trade("600519", "buy", shares=100)

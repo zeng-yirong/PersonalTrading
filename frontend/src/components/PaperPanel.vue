@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as echarts from 'echarts'
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import { api } from '../api'
 import type { StockContextPayload } from '../types'
 
@@ -184,6 +184,13 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   chart?.dispose()
   chart = null
+})
+onDeactivated(() => {
+  chart?.dispose()
+  chart = null
+})
+onActivated(() => {
+  void nextTick(renderNav)
 })
 </script>
 

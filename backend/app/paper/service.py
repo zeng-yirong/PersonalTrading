@@ -131,20 +131,27 @@ def trade(
                 "SELECT * FROM paper_positions WHERE symbol = ? AND status = 'open'",
                 (symbol,),
             ).fetchone()
+            entry_adj = _adj_factor(symbol, day)
             if position:
                 total_shares = position["shares"] + shares
                 avg_cost = (position["avg_cost"] * position["shares"] + gross + fee) / total_shares
+                # 复权因子也要按股数加权：合并后的持仓只有一个"入场因子"。
+                old_adj = position["entry_adj"] if "entry_adj" in position.keys() else None
+                if old_adj and entry_adj:
+                    blended_adj = (float(old_adj) * position["shares"] + entry_adj * shares) / total_shares
+                else:
+                    blended_adj = old_adj or entry_adj
                 conn.execute(
-                    "UPDATE paper_positions SET shares = ?, avg_cost = ? WHERE id = ?",
-                    (total_shares, round(avg_cost, 4), position["id"]),
+                    "UPDATE paper_positions SET shares = ?, avg_cost = ?, entry_adj = ? WHERE id = ?",
+                    (total_shares, round(avg_cost, 4), blended_adj, position["id"]),
                 )
                 position_id = position["id"]
             else:
                 cursor = conn.execute(
                     "INSERT INTO paper_positions(symbol, name, shares, avg_cost, opened_at, "
-                    "status, run_id, note) VALUES(?, ?, ?, ?, ?, 'open', ?, ?)",
+                    "status, run_id, note, entry_adj) VALUES(?, ?, ?, ?, ?, 'open', ?, ?, ?)",
                     (symbol, name, shares, round((gross + fee) / shares, 4), day.isoformat(),
-                     run_id, note),
+                     run_id, note, entry_adj),
                 )
                 position_id = int(cursor.lastrowid)
             conn.execute(
@@ -237,17 +244,26 @@ def trade_from_run(run_id: int, fraction: float = 1.0) -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------ valuation
+def _adj_factor(symbol: str, day: Optional[date] = None) -> Optional[float]:
+    """累计复权因子（as of ``day``，不传则取最新）。"""
+    with store.session(read_only=True) as conn:
+        if day is None:
+            row = conn.execute(
+                "SELECT adj_factor FROM daily WHERE symbol = ? AND adj_factor IS NOT NULL "
+                "ORDER BY trade_date DESC LIMIT 1",
+                [symbol],
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT adj_factor FROM daily WHERE symbol = ? AND trade_date <= ? "
+                "AND adj_factor IS NOT NULL ORDER BY trade_date DESC LIMIT 1",
+                [symbol, day],
+            ).fetchone()
+    return float(row[0]) if row and row[0] else None
+
+
 def _positions_value() -> float:
-    with connection() as conn:
-        rows = conn.execute(
-            "SELECT symbol, shares FROM paper_positions WHERE status = 'open'"
-        ).fetchall()
-    total = 0.0
-    for row in rows:
-        bars = store.get_daily(row["symbol"], limit=1)
-        if bars:
-            total += float(row["shares"]) * float(bars[-1]["close"])
-    return total
+    return sum(item["market_value"] or 0 for item in positions())
 
 
 def positions() -> list[dict[str, Any]]:
@@ -260,7 +276,19 @@ def positions() -> list[dict[str, Any]]:
     output = []
     for row in rows:
         bars = store.get_daily(row["symbol"], limit=1)
-        price = float(bars[-1]["close"]) if bars else None
+        close = float(bars[-1]["close"]) if bars else None
+        # 拆股/分红后用复权因子把"今天的价"折回入场时的口径，否则除权日会凭空
+        # 亏掉一个跌停（茅台 2026-11-26 建仓，下次除权就会踩到）。
+        entry_adj = row["entry_adj"] if "entry_adj" in row.keys() else None
+        if not entry_adj and row["opened_at"]:
+            entry_adj = _adj_factor(row["symbol"], date.fromisoformat(str(row["opened_at"])[:10]))
+        current_adj = _adj_factor(row["symbol"])
+        ratio = (
+            current_adj / float(entry_adj)
+            if current_adj and entry_adj
+            else 1.0
+        )
+        price = close * ratio if close is not None else None
         value = price * row["shares"] if price else None
         cost = row["avg_cost"] * row["shares"]
         output.append(

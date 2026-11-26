@@ -133,7 +133,8 @@ CREATE TABLE IF NOT EXISTS paper_positions (
     closed_at TEXT,
     status TEXT NOT NULL DEFAULT 'open',
     run_id INTEGER,
-    note TEXT
+    note TEXT,
+    entry_adj REAL              -- 建仓时的累计复权因子，用于拆股/分红后的估值
 );
 
 CREATE INDEX IF NOT EXISTS idx_paper_positions_status
@@ -267,6 +268,7 @@ def _migrate(conn) -> None:
         ("backtest_runs", "source_run_id", "INTEGER"),
         ("topic_reports", "source_run_id", "INTEGER"),
         ("agent_runs", "skill_version", "TEXT"),
+        ("paper_positions", "entry_adj", "REAL"),
     )
     for table, column, kind in migrations:
         existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
