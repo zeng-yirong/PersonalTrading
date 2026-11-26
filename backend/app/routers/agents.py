@@ -43,6 +43,7 @@ async def status() -> dict:
         "panel_ready": panel_store.is_ready(),
         "skill_version": skills.label(),
         "skills": skills.describe(),
+        "skill_calls": skills.usage(10),
         "memory": memory.stats(),
         "coverage": {
             key: (value.isoformat() if hasattr(value, "isoformat") else value)

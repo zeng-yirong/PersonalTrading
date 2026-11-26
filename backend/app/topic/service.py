@@ -17,6 +17,7 @@ from app.data import store as market_store
 from app.market import overview as market_overview
 from app.market import sentiment as sentiment_series
 from app.topic import context, daily, prompts, store
+from app import skills
 
 MAX_TOPIC_CHARS = 80
 MIN_TOPIC_CHARS = 2
@@ -53,7 +54,7 @@ async def research(
     payload = json.dumps(_slim(snapshot), ensure_ascii=False, separators=(",", ":"))
     user = prompts.build_user(text, payload, snapshot.get("data_gaps") or [])
     reply = await client.complete_json(
-        prompts.SYSTEM, user, max_tokens=4096, temperature=0.2
+        prompts.SYSTEM + skills.prompt_suffix("topic"), user, max_tokens=4096, temperature=0.2
     )
     problems = _problems(reply)
     if problems:
@@ -61,7 +62,7 @@ async def research(
             missing="、".join(problems), required="、".join(prompts.REQUIRED)
         )
         reply = await client.complete_json(
-            prompts.SYSTEM,
+            prompts.SYSTEM + skills.prompt_suffix("topic"),
             f"{user}\n\n{repair}",
             max_tokens=4096,
             temperature=0.1,
@@ -98,6 +99,7 @@ async def research(
     record["completion_tokens"] = usage["completion_tokens"]
     record["id"] = store.save(record)
     record["created_at"] = _created_at(record["id"])
+    record["skill_version"] = skills.record("topic", record["id"])
     return record
 
 

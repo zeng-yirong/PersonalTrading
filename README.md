@@ -1,4 +1,4 @@
-# PersonalTrading
+﻿# PersonalTrading
 
 本地个人 **A 股 / ETF 研究助手**。单机运行，不依赖 MongoDB / Redis，不做用户体系，数据与笔记全部保存在本地 SQLite。
 
@@ -974,16 +974,26 @@ python scripts/check_sources.py --quick  # 只看能力矩阵
 
 推演要能"越做越好"，需要两样东西：**可版本化的经验**和**能查到的历史**。这一层不训练任何权重（goat.md 的非目标），只做文本与检索。
 
-### 技能 = 文本 + 版本
+### 技能 = 文本 + 版本（5 个，一对一挂在核心功能上）
+
+| 技能 | 加载点 | 管什么 |
+|---|---|---|
+| `equity-desk` | 交易员 + 风控负责人 | 仓位与信心/赔率挂钩、目标价必须有锚、止损必须可执行 |
+| `theme-desk` | 主题研究 | 裁定四选一、观点挂可验证信号、行业结论带参照物 |
+| `screen-dsl` | 选股条件解析 | 一条件一 filter、单位纪律、宁少勿多 |
+| `strategy-review` | 回测 / 因子复核 | 四条硬门槛、区分三种"没跑赢"、方向稳定性优先 |
+| `review-desk` | 复盘与归因 | 只评预测不评触发、归因落到指标、命中率分级 |
 
 ```bash
-ls backend/app/skills/          # manifest.json + equity-desk.md
-python -c "from app.skills import describe; print(describe())"
+ls backend/app/skills/                    # manifest.json + 5 个 .md
+curl -X POST http://127.0.0.1:8010/api/backtest/runs/5/commentary   # 回测复核
+curl -X POST http://127.0.0.1:8010/api/factors/runs/16/commentary   # 因子复核
+curl -X POST http://127.0.0.1:8010/api/ledger/review/commentary     # 复盘复核
 ```
 
-- 每个技能是**一段文本**，注入到它声明的角色（`equity-desk@v0.1` → 交易员 + 风控负责人），加载点在 `nodes.py`；
 - 启动时校验：总数 ≤5、每个角色最多一个**正式版**（副本不接正式决策）、正文 ≤2400 字——超了直接抛 `SkillError`，不静默跳过；
-- 每次推演把 `equity-desk@v0.1` 写进 `agent_runs.skill_version`，并显示在报告头。六周后可以问"这套规则带来的赢面是多少"，而不是猜改 prompt 有没有用。
+- 推演把 `equity-desk@v0.1` 写进 `agent_runs.skill_version`（报告头 + 前端标签）；其余加载点写 `skill_calls`（模块 / 技能 / 版本 / 对应 id）；
+- **回测、因子、复盘本身没有模型调用**，这两个技能走显式复核接口：先跑**确定性 rubric**（四条硬门槛 / 三道门），再把 rubric 与指标交给模型解释。rubric 在前，是为了"没模型也能用、模型不是判据"。
 
 ### 记忆 = 历史结论 + 事后判定
 
@@ -1132,7 +1142,7 @@ python scripts/backup_panel.py --out D:\bk --keep 3
 ## 开发
 
 ```bash
-# 后端测试（当前 219 条，约 80 秒）
+# 后端测试（当前 231 条，约 80 秒）
 pytest backend/tests -q
 
 # 前端类型检查 + 构建

@@ -1,4 +1,4 @@
-"""Backtest endpoints: run a screener query over history, keep the runs.
+﻿"""Backtest endpoints: run a screener query over history, keep the runs.
 
 The request reuses the screener's query model on purpose: whatever the screener
 accepts, the backtest accepts, and the field whitelist is validated in one place.
@@ -69,3 +69,19 @@ async def run_detail(run_id: int) -> dict[str, Any]:
     if result is None:
         raise HTTPException(status_code=404, detail=f"回测 {run_id} 不存在")
     return result
+
+
+@router.post("/runs/{run_id}/commentary")
+async def run_commentary(run_id: int) -> dict[str, Any]:
+    """按 strategy-review 技能复核这次回测：rubric 先跑，模型只做解释。"""
+    from app.agents import commentary
+    from app.backtest import store as backtest_store
+
+    run = await run_in_threadpool(backtest_store.get_run, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"回测 {run_id} 不存在")
+    payload = await commentary.comment_backtest(
+        run.get("metrics") or {}, run.get("title") or "", ref_id=run_id
+    )
+    payload["run_id"] = run_id
+    return payload

@@ -17,6 +17,7 @@ const consensus = ref<Record<string, any> | null>(null)
 const durationMs = ref(0)
 const rounds = ref(2)
 const runId = ref<number | null>(null)
+const skillVersion = ref('')
 const history = ref<AgentRunSummary[]>([])
 const stageText = ref('')
 const trading = ref(false)
@@ -64,6 +65,7 @@ function handle(event: AgentEvent) {
       break
     case 'run_start':
       stageText.value = `开始分析 ${event.name || ''}（截止 ${event.as_of || ''}）`
+      skillVersion.value = event.skill_version || ''
       break
     case 'node_start':
     case 'node_end':
@@ -228,6 +230,9 @@ onBeforeUnmount(close)
       <div v-if="verdict" style="margin-top: 4px">
         风控裁定：<strong>{{ verdict.decision }}</strong> · 最终仓位
         <strong>{{ verdict.final_position_pct }}%</strong>
+        <span v-if="skillVersion" class="chip agent-skill" :title="'本次推演加载的技能版本'">
+          {{ skillVersion }}
+        </span>
         <button
           v-if="runId && (verdict.final_position_pct ?? 0) > 0 && ['批准', '调整后批准'].includes(verdict.decision)"
           class="chip"

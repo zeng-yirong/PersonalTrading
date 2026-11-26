@@ -140,6 +140,19 @@ CREATE TABLE IF NOT EXISTS paper_positions (
 CREATE INDEX IF NOT EXISTS idx_paper_positions_status
     ON paper_positions(status, symbol);
 
+-- 每次技能被加载时留一行：哪个模块、哪个技能、哪一版。推演另有 skill_version
+-- 列，这张表覆盖主题 / 选股 / 回测 / 复盘这些没有 run 表的地方。
+CREATE TABLE IF NOT EXISTS skill_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    module TEXT NOT NULL,
+    ref_id INTEGER,
+    skill_id TEXT NOT NULL,
+    version TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_calls_module ON skill_calls(module, created_at);
+
 CREATE TABLE IF NOT EXISTS paper_trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     position_id INTEGER,

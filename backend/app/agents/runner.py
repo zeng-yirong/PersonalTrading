@@ -240,10 +240,13 @@ def build_report(state: dict[str, Any], ctx: dict[str, Any], usage: dict[str, in
     lines.append("")
     guards_found = guards.check_proposal(proposal, price.get("last_close"))
     guards_found += guards.check_verdict(verdict, proposal)
-    if guards_found:
+    fixes = state.get("guard_fixes") or []
+    if guards_found or fixes:
         lines.extend(["## 决策体检（自动校验）", ""])
+        for item in fixes:
+            lines.append(f"- 已修正：{item}")
         for item in guards_found:
-            lines.append(f"- {item}")
+            lines.append(f"- 仅提示：{item}")
         lines.append("")
     if errors:
         lines.extend(["## 运行异常", ""])
@@ -288,6 +291,8 @@ async def stream_research(
         run_id = await asyncio.to_thread(
             agent_store.create_run, code, name, client.model, rounds, ctx, skill_label
         )
+        if run_id and skill_label:
+            await asyncio.to_thread(skills.record, "agents", run_id, "trader")
 
     yield {
         "type": "run_start",
@@ -366,6 +371,16 @@ async def stream_research(
         usage = client.usage.as_dict()
         final_state["model"] = client.model
         final_state["rounds"] = rounds
+        # 硬约束：自相矛盾的数字在落库前就被改掉（仓位钳制、目标价/止损非法的
+        # 降级为"数据不足"），而不是只写一行"体检提示"然后原样存下去。
+        proposal, verdict, fixes = guards.sanitize(
+            final_state.get("proposal") or {},
+            final_state.get("verdict") or {},
+            ctx["price"].get("last_close"),
+        )
+        final_state["proposal"] = proposal
+        final_state["verdict"] = verdict
+        final_state["guard_fixes"] = fixes
         report = build_report(final_state, ctx, usage)
         duration_ms = int((time.perf_counter() - started) * 1000)
 

@@ -142,3 +142,42 @@ def describe() -> list[dict[str, object]]:
         }
         for skill in all_skills()
     ]
+
+
+def record(module: str, ref_id: Optional[int] = None, role: str = "") -> str:
+    """记下"这次调用用了哪一版技能"。没有技能时返回空串，不写空行。
+
+    ``module`` 是加载点（agents / topic / screener / backtest / factor / review），
+    ``role`` 缺省时按模块推断——一个模块只挂一个技能。
+    """
+    skill = for_role(role or module)
+    if skill is None:
+        return ""
+    from app.db import connection, now_iso
+
+    try:
+        with connection() as conn:
+            conn.execute(
+                "INSERT INTO skill_calls(module, ref_id, skill_id, version, created_at) "
+                "VALUES(?, ?, ?, ?, ?)",
+                (module, ref_id, skill.id, skill.version, now_iso()),
+            )
+    except Exception:  # noqa: BLE001 - 记账失败不该挡住业务
+        return skill.label
+    return skill.label
+
+
+def usage(limit: int = 20) -> list[dict[str, object]]:
+    """最近哪些模块用了哪一版技能（运维面板用）。"""
+    from app.db import connection
+
+    try:
+        with connection() as conn:
+            rows = conn.execute(
+                "SELECT module, ref_id, skill_id, version, created_at FROM skill_calls "
+                "ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    except Exception:  # noqa: BLE001 - 老库还没建表
+        return []
+    return [dict(row) for row in rows]

@@ -12,6 +12,7 @@ from typing import Any
 from app.agents.llm import ChatClient, LLMError
 from app.screener.fields import describe_for_prompt
 from app.screener.query import QueryError, ScreenQuery
+from app import skills
 
 SYSTEM = """你是 A 股选股条件解析器。把用户的中文需求翻译成一个 JSON 查询对象。
 
@@ -54,12 +55,12 @@ async def parse(text: str, *, limit: int = 30) -> ScreenQuery:
     if not ok:
         raise LLMError(reason)
 
-    system = SYSTEM.format(catalog=describe_for_prompt())
+    system = SYSTEM.format(catalog=describe_for_prompt()) + skills.prompt_suffix("screener")
     user = f"选股需求：{text}\n\n请输出 JSON，limit 用 {limit}。"
 
     payload = await client.complete_json(system, user, max_tokens=1200)
     try:
-        return ScreenQuery.from_dict(payload)
+        query = ScreenQuery.from_dict(payload)
     except QueryError as exc:
         # One corrective round with the precise complaint.
         corrective = (
@@ -68,9 +69,11 @@ async def parse(text: str, *, limit: int = 30) -> ScreenQuery:
         )
         payload = await client.complete_json(system, corrective, max_tokens=1200)
         try:
-            return ScreenQuery.from_dict(payload)
+            query = ScreenQuery.from_dict(payload)
         except QueryError as second:
             raise QueryError(f"无法解析为有效查询：{second}") from second
+    skills.record("screener")
+    return query
 
 
 async def parse_and_run(text: str, *, limit: int = 30) -> dict[str, Any]:

@@ -7,6 +7,38 @@
       "roles": ["trader", "risk_manager"],
       "file": "equity-desk.md",
       "summary": "单股推演的执行纪律：仓位与信心/赔率挂钩、目标价必须有锚、止损必须可执行、失效条件必须明天能验证。"
+    },
+    {
+      "id": "theme-desk",
+      "version": "v0.1",
+      "status": "champion",
+      "roles": ["topic"],
+      "file": "theme-desk.md",
+      "summary": "主题研究：裁定必须四选一、观点挂可验证信号、行业结论带参照物、缺口要说清哪个判断做不了。"
+    },
+    {
+      "id": "screen-dsl",
+      "version": "v0.1",
+      "status": "champion",
+      "roles": ["screener"],
+      "file": "screen-dsl.md",
+      "summary": "选股条件解析：一条件一 filter、单位纪律、宁少勿多、出错保留用户原词。"
+    },
+    {
+      "id": "strategy-review",
+      "version": "v0.1",
+      "status": "champion",
+      "roles": ["backtest", "factor"],
+      "file": "strategy-review.md",
+      "summary": "回测/因子评审：四条硬门槛、区分三种没跑赢、方向稳定性优先于 IC 大小。"
+    },
+    {
+      "id": "review-desk",
+      "version": "v0.1",
+      "status": "champion",
+      "roles": ["review"],
+      "file": "review-desk.md",
+      "summary": "复盘与归因：只评预测不评触发、归因落到指标、命中率分级怎么读、规则违规单独计数。"
     }
   ]
 }

@@ -38,6 +38,16 @@ async def review_refresh(limit: int = Query(200, ge=1, le=500)) -> dict[str, Any
     return await run_in_threadpool(review_job.run, limit)
 
 
+@router.post("/ledger/review/commentary")
+async def review_commentary() -> dict[str, Any]:
+    """按 review-desk 技能复核复盘命中率（rubric 先跑，模型只做解释）。"""
+    from app.agents import commentary
+    from app.topic import service as topic_service
+
+    payload = await run_in_threadpool(topic_service.daily_review, 8)
+    return await commentary.comment_review(payload)
+
+
 @router.get("/ledger")
 async def ledger_entries(
     limit: int = Query(50, ge=1, le=200),

@@ -1,4 +1,4 @@
-"""Factor mining endpoints: library, evaluation run, history."""
+﻿"""Factor mining endpoints: library, evaluation run, history."""
 
 from __future__ import annotations
 
@@ -57,3 +57,32 @@ async def run_detail(run_id: int) -> dict[str, Any]:
     if result is None:
         raise HTTPException(status_code=404, detail=f"因子评估 {run_id} 不存在")
     return result
+
+
+@router.post("/runs/{run_id}/commentary")
+async def run_commentary(
+    run_id: int, name: str = Query("", description="因子名，默认取 |ICIR| 最大的")
+) -> dict[str, Any]:
+    """按 strategy-review 技能复核单个因子（三道门 rubric + 模型解释）。"""
+    from app.agents import commentary
+    from app.factor import store as factor_store
+
+    run = await run_in_threadpool(factor_store.get, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"因子评估 {run_id} 不存在")
+    rows = [row for row in (run.get("factors") or []) if isinstance(row, dict)]
+    if not rows:
+        raise HTTPException(status_code=400, detail="这次评估没有因子结果")
+    if name:
+        rows = [row for row in rows if row.get("name") == name]
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"这次评估里没有因子 {name}")
+    row = max(rows, key=lambda item: abs(float(item.get("icir") or 0)))
+    payload = await commentary.comment_factor(
+        commentary.factor_metrics(row),
+        f"{row.get('name')} {row.get('label') or ''}".strip(),
+        ref_id=run_id,
+    )
+    payload["run_id"] = run_id
+    payload["factor"] = row.get("name")
+    return payload

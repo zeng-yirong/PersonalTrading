@@ -391,6 +391,8 @@ export interface AgentEvent {
   as_of?: string
   model?: string
   rounds?: number
+  /** run_start 事件带：本次推演加载的 `skill_id@version`。 */
+  skill_version?: string
   verdict?: Record<string, any> | null
   proposal?: Record<string, any> | null
   consensus?: Record<string, any> | null
