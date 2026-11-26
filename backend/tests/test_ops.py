@@ -97,6 +97,48 @@ def test_health_flags_a_stale_heat_table(panel):
     assert any("东财热榜" in issue for issue in payload["issues"])
 
 
+def test_health_reports_how_far_the_calendar_reaches(panel):
+    """日历耗尽会让 T+20 复盘集体卡住，所以它必须出现在健康检查里。"""
+    payload = health.snapshot()
+    assert payload["calendar"]["last"] == panel[-1].isoformat()
+    assert payload["calendar"]["open_days_left"] == 0
+    assert any("交易日历" in issue for issue in payload["issues"])
+
+
+# ------------------------------------------------------------------ repair
+def test_repair_rejects_unknown_or_code_mode_datasets(panel):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    assert client.post("/api/data/repair?dataset=nope").status_code == 400
+    assert client.post("/api/data/repair?dataset=sw_daily").status_code == 400   # 按代码拉取
+
+
+def test_repair_runs_the_backfill_for_recent_days(panel, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.routers import ops as ops_router
+
+    seen: dict = {}
+
+    def fake_run(names, years=None, workers=4, force=False, max_parts=None, progress=None, dates=None):
+        seen.update({"names": names, "dates": dates})
+        return [{"dataset": names[0], "parts": len(dates or []), "rows": 42, "status": "ok"}]
+
+    monkeypatch.setattr(ops_router, "run_backfill", fake_run)
+    today = date.today()
+    store.upsert_calendar([(today - timedelta(days=offset), True) for offset in range(10)], "test")
+    client = TestClient(app)
+    body = client.post("/api/data/repair?dataset=margin_detail&days=3").json()
+
+    assert seen["names"] == ["margin_detail"]
+    assert len(seen["dates"]) == 3
+    assert body["rows"] == 42 and body["parts"] == 3 and body["label"] == "融资融券"
+
+
 # ----------------------------------------------------------------------- ledger
 def _seed_records() -> None:
     with connection() as conn:

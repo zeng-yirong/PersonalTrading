@@ -35,6 +35,8 @@ from app.services.symbols import exchange, normalize_code
 DATE_PATTERN = re.compile(r"^\d{8}$")
 FLUSH_PARTS = 8
 MARKET_CLOSE = dtime(15, 5)
+# 剩余交易日少于这个数就顺手刷新日历：20 个交易日是 T+20 复盘的窗口。
+CALENDAR_MIN_DAYS = 25
 
 # Datasets that belong in the core panel rather than in their own table.
 CORE_WRITERS = {
@@ -679,6 +681,17 @@ def update_today(
     if not ok:
         raise BackfillError(f"Tushare 不可用：{reason}")
     store.init_schema()
+
+    # 交易日历只覆盖到某一天时，T+5/T+20 复盘会从那天起集体卡住。日更顺手把它
+    # 续上（Tushare 一般在 12 月发布次年日历），比等人工发现便宜得多。
+    remaining = store.get_trade_days(target, date(target.year + 1, 12, 31))
+    if len(remaining) < CALENDAR_MIN_DAYS:
+        from app.data import sync as sync_module
+
+        try:
+            sync_module.sync_calendar()
+        except Exception as exc:  # noqa: BLE001 - 日历刷新失败不该挡住日更
+            store.log_sync("daily:calendar", datetime.now(), 0, "error", str(exc)[:200])
 
     specs = daily_specs()
     results: list[dict[str, Any]] = []

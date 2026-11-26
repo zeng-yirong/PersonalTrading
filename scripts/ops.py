@@ -194,6 +194,11 @@ def cmd_health(args: argparse.Namespace) -> int:
         for item in payload["tables"]
     ]
     _table(["表", "名称", "最新日期", "行数", "滞后(交易日)", "状态"], rows)
+    calendar = payload.get("calendar") or {}
+    if calendar.get("last"):
+        print(
+            f"\n交易日历：覆盖到 {calendar['last']}，之后还有 {calendar['open_days_left']} 个交易日"
+        )
     if payload["issues"]:
         print("\n问题：")
         for issue in payload["issues"]:

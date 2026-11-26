@@ -14,6 +14,7 @@ from typing import Any
 from app.data import fingerprint, store
 
 # (table, label, expected lag in trading days, date column)
+CALENDAR_MIN_DAYS = 25          # 少于这个剩余交易日数，T+20 复盘开始断档
 TABLES: tuple[tuple[str, str, int, str], ...] = (
     ("daily", "日线", 0, "trade_date"),
     ("daily_basic", "每日指标", 0, "trade_date"),
@@ -48,16 +49,23 @@ def snapshot() -> dict[str, Any]:
         tables = [_table(conn, name, label, lag, column) for name, label, lag, column in TABLES]
         issues, partial = _partial_days(conn)
         recent = _recent_sync(conn)
+        calendar = _calendar_coverage(conn, as_of)
 
     stale = [item for item in tables if item["status"] == "stale"]
     empty = [item for item in tables if item["status"] == "empty"]
     issues = [
         f"{item['label']}（{item['table']}）滞后 {item['lag_days']} 个交易日" for item in stale
     ] + [f"{item['label']}（{item['table']}）没有数据" for item in empty] + issues
+    if calendar["open_days_left"] < CALENDAR_MIN_DAYS:
+        issues.append(
+            f"交易日历只覆盖到 {calendar['last']}，仅剩 {calendar['open_days_left']} 个交易日；"
+            "T+5/T+20 复盘会从那里断档（日更会自动重试刷新）"
+        )
     return {
         "as_of": as_of.isoformat(),
         "checked_at": _now(),
         "tables": tables,
+        "calendar": calendar,
         "partial_days": partial,
         "recent_sync": recent,
         "issues": issues,
@@ -93,6 +101,19 @@ def _table(conn, name: str, label: str, expected_lag: int, column: str) -> dict[
         "lag_days": int(lag),
         "status": status,
         "expected_lag": expected_lag,
+    }
+
+
+def _calendar_coverage(conn, as_of) -> dict[str, Any]:
+    """How far the trade calendar reaches — review jobs need future dates."""
+    row = conn.execute("SELECT MAX(cal_date) FROM calendar").fetchone()
+    last = row[0] if row else None
+    left = conn.execute(
+        "SELECT COUNT(*) FROM calendar WHERE is_open AND cal_date > ?", [as_of]
+    ).fetchone()[0]
+    return {
+        "last": last.isoformat() if last else None,
+        "open_days_left": int(left or 0),
     }
 
 
