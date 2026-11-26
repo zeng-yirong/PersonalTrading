@@ -20,7 +20,7 @@ from app.data import store
 from app.services.indicators import compute_all
 from app.services.symbols import normalize_code
 
-from app.agents import context_events, context_market
+from app.agents import context_events, context_market, memory
 
 BENCHMARKS = (("000300.SH", "沪深300"), ("000001.SH", "上证指数"))
 
@@ -109,6 +109,11 @@ def build_context(symbol: str, *, bars: int = 250) -> dict[str, Any]:
     sentiment = _build_sentiment(ts_code, code)
     market = _build_market(end)
 
+    try:
+        memory.sync()          # 把新完成的结论补进检索索引
+    except Exception:  # noqa: BLE001 - 记忆失败不该挡住推演
+        pass
+
     return {
         "symbol": code,
         "profile": profile,
@@ -123,6 +128,7 @@ def build_context(symbol: str, *, bars: int = 250) -> dict[str, Any]:
         "sector": context_market.build_sector(profile["industry"], code),
         "events": context_events.build_events(ts_code),
         "attention": context_events.build_attention(ts_code, code),
+        "memory": memory.for_symbol(code, limit=3),
         "as_of": _iso(end),
     }
 

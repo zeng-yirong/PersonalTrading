@@ -12,6 +12,7 @@ import operator
 from typing import Annotated, Any, TypedDict
 
 from app.agents import context as ctxmod
+from app.agents import memory as memory_mod
 from app.agents import prompts
 from app.agents.llm import ChatClient, LLMError
 from app import skills
@@ -202,6 +203,9 @@ def _make_trader(client: ChatClient):
             f"分歧点：{'；'.join(str(x) for x in (consensus.get('key_disagreements') or []))}\n\n"
             f"【辩论摘要】\n{_debate_text(state, limit=4)}"
         )
+        recalled = memory_mod.render(ctx.get("memory") or [])
+        if recalled:
+            user = f"{user}\n\n{recalled}"
         try:
             payload = await client.complete_json(
                 prompts.SYSTEM_TRADER + skills.prompt_suffix("trader"), user, max_tokens=1800
@@ -269,6 +273,9 @@ def _make_risk_manager(client: ChatClient):
             f"信心 {proposal.get('conviction')}\n\n"
             f"【三位风控委员意见】\n{review_text or '（无）'}"
         )
+        recalled = memory_mod.render(ctx.get("memory") or [])
+        if recalled:
+            user = f"{user}\n\n{recalled}"
         try:
             payload = await client.complete_json(
                 prompts.SYSTEM_RISK_MANAGER + skills.prompt_suffix("risk_manager"), user

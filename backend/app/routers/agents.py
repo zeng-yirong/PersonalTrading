@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from app.agents import runner, store as agent_store
+from app.agents import memory, runner, store as agent_store
 from app.agents.llm import ChatClient
 from app import skills
 from app.config import settings
@@ -43,6 +43,7 @@ async def status() -> dict:
         "panel_ready": panel_store.is_ready(),
         "skill_version": skills.label(),
         "skills": skills.describe(),
+        "memory": memory.stats(),
         "coverage": {
             key: (value.isoformat() if hasattr(value, "isoformat") else value)
             for key, value in panel_store.get_coverage().items()
