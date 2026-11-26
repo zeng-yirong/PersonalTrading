@@ -3,6 +3,7 @@
     python scripts/topic.py "市场情绪现在处于什么位置"
     python scripts/topic.py "白酒行业还能拿吗" --md data/baijiu.md
     python scripts/topic.py "白酒" --context          # 只看数据快照，不调模型
+    python scripts/topic.py --today                   # 当日「一键复盘」（每日 18:20 定时跑）
     python scripts/topic.py --list
 """
 
@@ -76,6 +77,9 @@ async def main_async(args: argparse.Namespace) -> int:
         print_history(args.limit_history)
         return 0
 
+    if getattr(args, "today", False):
+        return await run_today(args)
+
     topic = " ".join(args.topic or []).strip()
     if not topic:
         print("请给出研究主题，例如：python scripts/topic.py \"市场情绪怎么样\"", file=sys.stderr)
@@ -119,12 +123,48 @@ async def main_async(args: argparse.Namespace) -> int:
     return 0
 
 
+async def run_today(args: argparse.Namespace) -> int:
+    """Generate (or reuse) the daily brief — the headless twin of the button.
+
+    Scheduled right after the 18:00 sync so every trading day has a brief; the
+    brief's `watching` list is what the next day's reconciliation scores.
+    """
+    try:
+        result = await service.daily_brief(force=args.force, model=args.model or "")
+    except (TopicError, LLMError) as exc:
+        print(f"[失败] {exc}", file=sys.stderr)
+        return 1
+
+    report = result["report"]
+    if result.get("cached"):
+        print(
+            f"今天（{result.get('as_of')}）的复盘已存在，未重新生成："
+            f"#{report['id']} {report.get('title') or ''}"
+        )
+        return 0
+
+    if args.md:
+        Path(args.md).write_text(report["markdown"], encoding="utf-8")
+        print(f"报告已写入 {args.md}")
+    print(report["markdown"])
+    report_body = report.get("report") or {}
+    print(
+        f"—— #{report['id']}｜{report.get('model')}｜"
+        f"阶段 {report_body.get('stage')}｜立场 {report_body.get('stance')}｜"
+        f"tokens {report['usage']['prompt_tokens']}→{report['usage']['completion_tokens']}｜"
+        f"{report['created_at']}"
+    )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="PersonalTrading 主题研究")
     parser.add_argument("topic", nargs="*", help="研究主题（大盘/行业/题材/情绪）")
     parser.add_argument("--md", help="把 markdown 报告写到文件")
     parser.add_argument("--json-out", help="把快照或报告 JSON 写到文件")
     parser.add_argument("--context", action="store_true", help="只看数据快照，不调用模型")
+    parser.add_argument("--today", action="store_true", help="生成当日「一键复盘」（写入库，非交易日也可跑）")
+    parser.add_argument("--force", action="store_true", help="配合 --today：忽略当天缓存，强制重算")
     parser.add_argument("--model", help="覆盖默认模型")
     parser.add_argument("--source-run", type=int, help="关联的推演编号")
     parser.add_argument("--list", action="store_true", help="列出历史报告")

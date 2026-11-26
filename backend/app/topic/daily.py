@@ -492,14 +492,16 @@ async def generate(
     previous: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     user = _prompt(sentiment, overview, previous)
-    reply = await client.complete_json(SYSTEM, user, max_tokens=3000, temperature=0.2)
+    # deepseek-flash 的 reasoning_content 也算在 max_tokens 里：3000 会在长推理日
+    # 直接截断成半截 JSON（2026-11-26 就这样退回规则版），所以这一段给足 8000。
+    reply = await client.complete_json(SYSTEM, user, max_tokens=8000, temperature=0.2)
     problems = _problems(reply, previous)
     if problems:
         repair = (
             "上一次输出缺少或不合规：" + "、".join(problems)
             + "。只输出 JSON，字段齐全、数字只能来自数据、watching 每条都要带数字阈值。"
         )
-        reply = await client.complete_json(SYSTEM, user + "\n\n" + repair, max_tokens=3000, temperature=0.1)
+        reply = await client.complete_json(SYSTEM, user + "\n\n" + repair, max_tokens=8000, temperature=0.1)
         problems = _problems(reply, previous)
     if not problems:
         ok, ratio = numbers_ok(
