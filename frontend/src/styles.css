@@ -3690,3 +3690,13 @@ details.note summary {
   border-radius: 3px;
   padding: 0 3px;
 }
+/* ---------- ops: 一键补数 ---------- */
+.ops-repair-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.ops-repair-note {
+  color: var(--accent);
+  font-size: 12px;
+  margin: 6px 0;
+}

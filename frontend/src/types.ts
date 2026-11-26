@@ -1237,10 +1237,22 @@ export interface OpsHealth {
   checked_at: string
   ok: boolean
   tables: OpsHealthTable[]
+  calendar?: { last: string | null; open_days_left: number }
   partial_days: OpsPartialDay[]
   recent_sync: OpsSyncLog[]
   issues: string[]
   fingerprint: OpsFingerprint
+}
+
+/** ``POST /data/repair``：一键补某张表最近 N 个交易日的缺口。 */
+export interface OpsRepair {
+  dataset: string
+  label: string
+  dates: string[]
+  parts: number
+  rows: number
+  status: string
+  errors: string[]
 }
 
 /* ---------- 全市场浏览 ---------- */

@@ -7,6 +7,7 @@ import type {
   OpsEntry,
   OpsFingerprint,
   OpsHealth,
+  OpsHealthTable,
   OpsKind,
   OpsLedger,
   OpsSummary,
@@ -71,6 +72,8 @@ const loaded = ref(false)
 const error = ref('')
 const reviewBusy = ref(false)
 const reviewNote = ref('')
+const repairing = ref('')
+const repairNote = ref('')
 
 let chart: echarts.ECharts | null = null
 let observer: ResizeObserver | null = null
@@ -328,6 +331,22 @@ async function load() {
   loading.value = false
   await nextTick()
   if (tab.value === 'cost') renderUsageChart()
+}
+
+async function repairTable(row: OpsHealthTable) {
+  if (repairing.value) return
+  repairing.value = row.table
+  repairNote.value = ''
+  try {
+    const result = await api.opsRepair(row.table, 5)
+    repairNote.value = `${result.label}：补最近 ${result.dates.length} 个交易日，写入 ${result.rows} 行（${result.status}）`
+    const fresh = await api.opsHealth()
+    health.value = fresh
+  } catch (err) {
+    repairNote.value = `补数失败：${(err as Error).message}`
+  } finally {
+    repairing.value = ''
+  }
 }
 
 async function refreshReviews() {
@@ -669,6 +688,8 @@ onBeforeUnmount(() => {
           </ul>
         </div>
 
+        <div v-if="repairNote" class="market-card-note ops-repair-note">{{ repairNote }}</div>
+
         <div v-if="healthTables.length" class="ops-health-block">
           <div class="ops-block-title">数据表状态（{{ healthTables.length }}）</div>
           <div class="screen-table-wrap ops-table-wrap-sm">
@@ -680,6 +701,7 @@ onBeforeUnmount(() => {
                   <th>最新日期</th>
                   <th>行数</th>
                   <th>延迟</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -696,6 +718,18 @@ onBeforeUnmount(() => {
                   <td class="mono">{{ int(row.rows) }}</td>
                   <td class="mono" :title="`期望 ≤ ${row.expected_lag} 天`">
                     {{ row.lag_days === null ? '—' : `${row.lag_days} 天` }}
+                  </td>
+                  <td>
+                    <button
+                      v-if="row.status !== 'ok'"
+                      type="button"
+                      class="btn ghost ops-repair-btn"
+                      :disabled="repairing !== ''"
+                      @click="repairTable(row)"
+                    >
+                      {{ repairing === row.table ? '补数中…' : '补 5 日' }}
+                    </button>
+                    <span v-else class="ops-table-name">—</span>
                   </td>
                 </tr>
               </tbody>

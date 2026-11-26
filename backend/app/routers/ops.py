@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
 
-from app.data import fingerprint
+from app.data import fingerprint, store
+from app.data.backfill import BackfillError
+from app.data.backfill import run as run_backfill
+from app.data.datasets import BY_NAME
 from app.ops import health, ledger
 from app.ops import review as review_job
 
@@ -61,3 +65,47 @@ async def data_health() -> dict[str, Any]:
 @router.get("/data/fingerprint")
 async def data_fingerprint(force: bool = Query(False)) -> dict[str, Any]:
     return await run_in_threadpool(fingerprint.current, force)
+
+
+def _last_trade_days(days: int) -> list[str]:
+    end = date.today()
+    start = end - timedelta(days=days * 3 + 10)
+    return [day.isoformat() for day in store.get_trade_days(start, end)][-days:]
+
+
+@router.post("/data/repair")
+async def data_repair(
+    dataset: str = Query(..., description="数据集名，如 margin_detail"),
+    days: int = Query(5, ge=1, le=10, description="补最近 N 个交易日"),
+) -> dict[str, Any]:
+    """一键补数：把某张表最近 N 个交易日的缺口重新拉一遍。
+
+    只接受「按日」数据集——按代码/按报告期的回填代价完全不同，不该由一个按钮触发。
+    """
+    spec = BY_NAME.get(dataset)
+    if spec is None:
+        raise HTTPException(status_code=400, detail=f"未知数据集：{dataset}")
+    if spec.mode != "date":
+        raise HTTPException(
+            status_code=400,
+            detail=f"{dataset} 的拉取方式是 {spec.mode}，不支持一键补数，请用 sync_market.py backfill",
+        )
+    keys = _last_trade_days(days)
+    if not keys:
+        raise HTTPException(status_code=409, detail="交易日历为空，先跑 sync_market.py calendar")
+    try:
+        summary = await run_in_threadpool(
+            lambda: run_backfill([dataset], years=1, workers=2, dates=keys)
+        )
+    except BackfillError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    item = summary[0] if summary else {}
+    return {
+        "dataset": dataset,
+        "label": spec.label,
+        "dates": keys,
+        "parts": item.get("parts", 0),
+        "rows": item.get("rows", 0),
+        "status": item.get("status", "unknown"),
+        "errors": item.get("errors") or [],
+    }

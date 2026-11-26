@@ -16,6 +16,7 @@ import type {
   Meta,
   OpsFingerprint,
   OpsHealth,
+  OpsRepair,
   OpsKind,
   OpsLedger,
   OpsReviewRefresh,
@@ -200,6 +201,11 @@ export const api = {
     }),
   opsUsage: (days = 14) => request<OpsUsage>(`/usage?days=${days}`),
   opsHealth: () => request<OpsHealth>('/data/health'),
+  opsRepair: (dataset: string, days = 5) =>
+    request<OpsRepair>(
+      `/data/repair?dataset=${encodeURIComponent(dataset)}&days=${days}`,
+      { method: 'POST', body: '{}' },
+    ),
   indexDetail: (code: string) =>
     request<StockDetailData>(`/index/${encodeURIComponent(code)}/detail`),
   indexHistory: (code: string, range: StockRange, period: StockPeriod = 'day') =>
