@@ -3680,3 +3680,13 @@ details.note summary {
   gap: 10px;
   margin-top: 10px;
 }
+
+/* ---------- daily brief: 复盘判定标签 ---------- */
+.review-kind {
+  color: var(--muted);
+  margin-right: 4px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 3px;
+}

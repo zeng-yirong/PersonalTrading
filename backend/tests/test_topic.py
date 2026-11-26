@@ -369,8 +369,9 @@ DAILY_REPLY = {
     },
     "yesterday": "无",
     "watching": [
-        {"metric": "limit_up", "op": ">=", "value": 66, "text": "次日涨停回到 66 家以上"},
-        {"metric": "amount_yi", "op": ">=", "value": 16678, "text": "成交额维持 16678 亿元以上"},
+        {"kind": "prediction", "metric": "limit_up", "op": ">=", "value": 66, "text": "次日涨停回到 66 家以上"},
+        {"kind": "prediction", "metric": "amount_yi", "op": ">=", "value": 16678, "text": "成交额维持 16678 亿元以上"},
+        {"kind": "trigger", "metric": "score", "op": ">=", "value": 45, "text": "情绪回到 45 以上才加仓"},
     ],
     "risks": ["量能不足"],
     "data_gaps": [],
@@ -432,14 +433,83 @@ def test_judge_signal_statuses():
     metrics = {"limit_up": 55.0, "amount_yi": 16000.0}
     judged = daily.judge(
         [
-            {"metric": "limit_up", "op": ">=", "value": 50, "text": "涨停≥50"},
-            {"metric": "limit_up", "op": "<=", "value": 50, "text": "涨停≤50"},
-            {"metric": "score", "op": ">=", "value": 20, "text": "分数缺失"},
+            {"kind": "prediction", "metric": "limit_up", "op": ">=", "value": 50, "text": "涨停≥50"},
+            {"kind": "prediction", "metric": "limit_up", "op": "<=", "value": 50, "text": "涨停≤50"},
+            {"kind": "prediction", "metric": "score", "op": ">=", "value": 20, "text": "分数缺失"},
+            {"kind": "trigger", "metric": "limit_up", "op": ">=", "value": 50, "text": "满足才买"},
+            {"kind": "trigger", "metric": "limit_up", "op": ">=", "value": 90, "text": "没满足"},
             "旧格式观察",
         ],
         metrics,
     )
-    assert [item["status"] for item in judged] == ["兑现", "落空", "未触发", "无法判定"]
+    assert [item["status"] for item in judged] == [
+        "兑现",
+        "落空",
+        "无法判定",
+        "已触发",
+        "未触发",
+        "无法判定",
+    ]
+    # 历史记录没有 kind，记作 legacy：照常判定，但不进任何分母。
+    assert judged[-1]["kind"] == "legacy"
+
+
+def test_prediction_anchored_at_today_is_rejected():
+    """把今天的值原样写成"明天≥今天"是硬币，不是预测。"""
+    from app.topic import daily
+
+    today = {"score": 34.6, "limit_up": 65.0, "amount_yi": 13259.9}
+    payload = dict(DAILY_REPLY)
+    payload["watching"] = [
+        {"kind": "prediction", "metric": "score", "op": ">=", "value": 34.6, "text": "情绪不破今日"},
+        {"kind": "prediction", "metric": "limit_up", "op": ">=", "value": 80, "text": "涨停回到 80 家"},
+    ]
+    problems = daily._problems(payload, None, today)
+    assert any("anchored" in item for item in problems)
+
+    payload["watching"][0]["value"] = 40  # 离今日值 5.4 分，超过 3 分步长
+    assert not any("anchored" in item for item in daily._problems(payload, None, today))
+
+
+def test_watching_needs_two_predictions():
+    from app.topic import daily
+
+    payload = dict(DAILY_REPLY)
+    payload["watching"] = [
+        {"kind": "trigger", "metric": "score", "op": ">=", "value": 45, "text": "a"},
+        {"kind": "trigger", "metric": "limit_up", "op": ">=", "value": 80, "text": "b"},
+    ]
+    problems = daily._problems(payload, None, {"score": 30.0, "limit_up": 65.0})
+    assert any("prediction" in item for item in problems)
+
+
+def test_daily_review_separates_predictions_from_triggers(panel):
+    """命中率只统计预测型；触发型进触发率，不再被记成"判断错误"。"""
+    from app.topic import store as topic_store
+
+    topic_store.save(
+        {
+            "topic": service.DAILY_TOPIC,
+            "title": "t",
+            "scope": "大盘",
+            "verdict": "中性",
+            "confidence": 30,
+            "model": "fake",
+            "as_of": panel[-2].isoformat(),
+            "report": {
+                "watching": [
+                    {"kind": "prediction", "metric": "limit_up", "op": ">=", "value": 999, "text": "必落空"},
+                    {"kind": "trigger", "metric": "limit_up", "op": ">=", "value": 0, "text": "必触发"},
+                ]
+            },
+            "markdown": "",
+        }
+    )
+    result = service.daily_review(3)
+    accuracy = result["accuracy"]
+    assert accuracy["prediction"] == {"hits": 0, "total": 1, "rate": 0.0}
+    assert accuracy["trigger"] == {"fired": 1, "total": 1, "rate": 100.0}
+    assert accuracy["total"] == 1          # 兼容旧字段：只有预测进分母
 
 
 def test_daily_review_empty_history(panel):

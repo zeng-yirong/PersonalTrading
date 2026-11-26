@@ -7,7 +7,9 @@ Design goals, in order:
    otherwise replaced by a rule-based memo.
 2. **结构固定** — 结论 / 盘面 / 情绪 / 资金 / 板块 / 操作建议 / 昨日对照 /
    观察 / 风险 / 缺口，缺一段就重试。
-3. **可验证** — 明日观察必须是「条件 + 阈值」，第二天可以自动判定。
+3. **可验证** — 明日观察必须是「条件 + 阈值」，第二天可以自动判定；其中
+   ``prediction`` 进命中率、``trigger`` 只进触发率（把入场条件记成"判断错误"
+   是 2026-11-26 之前的测量 bug）。
 4. **可追责** — 上一份复盘会作为输入，模型要逐条说明昨天的判断兑现没有。
 
 This module never touches the database; ``topic.service`` saves the result.
@@ -22,7 +24,7 @@ from typing import Any, Optional
 
 from app.agents.llm import ChatClient
 from app.market import overview as market_overview
-from app.market.sentiment import SIGNAL_METRICS
+from app.market.sentiment import SIGNAL_METRICS, SIGNAL_STEPS
 
 STAGES = ("冰点", "修复", "中性", "扩散", "偏热", "亢奋", "退潮")
 STANCES = ("进攻", "均衡", "防守")
@@ -52,10 +54,14 @@ SYSTEM = """你是 A 股的个人研究员，为个人交易账户写「今日�
 - sectors: {"leaders":[{"name","pct","note"}], "laggards":[...], "diffusion":"引用行业上涨占比", "concentration":"引用集中度", "continuity":"昨日领涨今天是否延续"}
 - action: {"position_range":"例如 0-2 成", "buy":["什么条件下买什么方向"], "sell":["什么条件下减仓/止盈"], "avoid":["今天不要做什么"]}
 - yesterday: "昨日判断对照：昨天说 X，今天 Y；没有上一份就写「无」"
-- watching: [{"metric":"指标","op":">=|<=|value":"阈值(数字)","text":"一句话"}]
+- watching: 2-4 条，每条带 kind：
+   {"kind":"prediction|trigger","metric":"指标","op":">=|<=|value":"阈值(数字)","text":"一句话"}
+   kind=prediction 是**对明天的预测**（会被次日自动判定，计入命中率）；
+   kind=trigger 是**交易触发条件**（只统计是否触发，不计入命中率）。
    指标只能取：score(情绪分) up_ratio(上涨占比%) above_ma20_ratio(站上20日线%) limit_up(涨停家数)
    limit_down(跌停家数) seal_rate(封板率%) amount_yi(成交额亿) amount_ratio(成交额/20日均量)
-   sector_up_ratio(行业上涨占比%) north_net(北向净流入万元)；至少 2 条
+   sector_up_ratio(行业上涨占比%) north_net(北向净流入万元)；
+   **至少 2 条 prediction**，最多 2 条 trigger。
 - risks: ["2-3 条风险"]
 - data_gaps: ["数据缺口，没有就写空数组"]
 规则：
@@ -63,6 +69,10 @@ SYSTEM = """你是 A 股的个人研究员，为个人交易账户写「今日�
 2. 数字只能来自数据；不确定就写「不确定」，不要编。
 3. 阶段要结合「分数 + 分位 + 今日变动 + 5 日变动」，不能只看一天。
 4. 板块只写数据里出现的行业名。
+5. **prediction 的阈值必须与今日实际值有明显差距**（步长：score 3 分、上涨占比 3pp、
+   站上20日线 2pp、涨停 5 家、跌停 3 家、封板率 3pp、成交额 500 亿、量比 0.1、
+   行业上涨占比 5pp、北向 5 亿元）。把今天的数值原样写成"预测明天≥今天"会被判为无效。
+6. trigger 的阈值可以等于今日值，但要在 text 里写清"满足才买/才减"，它不参与命中率。
 只输出 JSON，不要 markdown 代码块。"""
 
 
@@ -205,7 +215,11 @@ def _prompt(
 
 
 # ------------------------------------------------------------------ validation
-def _problems(payload: dict[str, Any], previous: Optional[dict[str, Any]]) -> list[str]:
+def _problems(
+    payload: dict[str, Any],
+    previous: Optional[dict[str, Any]],
+    today: Optional[dict[str, Any]] = None,
+) -> list[str]:
     issues: list[str] = []
     for key in REQUIRED:
         if not payload.get(key):
@@ -240,22 +254,51 @@ def _problems(payload: dict[str, Any], previous: Optional[dict[str, Any]]) -> li
     if not isinstance(watching, list) or len(watching) < 2:
         issues.append("watching")
     else:
+        predictions = 0
+        broken = False
         for item in watching:
             if not isinstance(item, dict):
                 issues.append("watching")
+                broken = True
+                break
+            kind = item.get("kind")
+            if kind not in {"prediction", "trigger"}:
+                issues.append("watching.kind")
+                broken = True
                 break
             if item.get("metric") not in SIGNAL_METRICS:
                 issues.append("watching.metric")
+                broken = True
                 break
             if item.get("op") not in {">=", "<="}:
                 issues.append("watching.op")
+                broken = True
                 break
-            if _num(item.get("value")) is None:
+            value = _num(item.get("value"))
+            if value is None:
                 issues.append("watching.value")
+                broken = True
                 break
             if not item.get("text"):
                 issues.append("watching.text")
+                broken = True
                 break
+            if kind == "prediction":
+                predictions += 1
+                step = SIGNAL_STEPS.get(item["metric"])
+                current = (today or {}).get(item["metric"])
+                if step and current is not None and abs(value - float(current)) < step:
+                    issues.append(
+                        f"watching.anchored（{item['metric']} 阈值 {value:g} 距今日 "
+                        f"{float(current):g} 不足最小步长 {step:g}）"
+                    )
+                    broken = True
+                    break
+        if not broken:
+            if predictions < 2:
+                issues.append("watching.prediction（至少 2 条 prediction）")
+            if len(watching) - predictions > 2:
+                issues.append("watching.trigger（最多 2 条 trigger）")
 
     # 数字自检：summary / action / sectors 里引用的数字要在快照里找得到
     if previous is not None:
@@ -304,30 +347,44 @@ def _watch_text(items: Any) -> list[str]:
     for item in items or []:
         if isinstance(item, dict):
             text = item.get("text") or f"{SIGNAL_METRICS.get(item.get('metric'), item.get('metric'))} {item.get('op')} {item.get('value')}"
-            output.append(f"{text}（{item.get('metric')} {item.get('op')} {item.get('value')}）")
+            tag = "触发" if item.get("kind") == "trigger" else "预测"
+            output.append(f"[{tag}] {text}（{item.get('metric')} {item.get('op')} {item.get('value')}）")
         else:
             output.append(str(item))
     return output
 
 
 def judge(signals: Any, metrics: dict[str, Any]) -> list[dict[str, Any]]:
-    """Judge yesterday's watching list against today's metrics (no model)."""
+    """Judge yesterday's watching list against today's metrics (no model).
+
+    两类观察分开判：``prediction`` 兑现/落空（进命中率）；``trigger`` 只问条件
+    有没有触发（进触发率）。把"满足才买"记成"判断错误"是 2026-11-26 之前的
+    测量 bug。没有 ``kind`` 的历史记录记作 ``legacy``：照常显示判定，但不进
+    任何分母——否则新旧口径混在一起，就看不出修好没有。
+    """
     output = []
     for item in signals or []:
         if not isinstance(item, dict):
-            output.append({"signal": str(item), "status": "无法判定", "actual": None})
+            output.append(
+                {"signal": str(item), "kind": "legacy", "status": "无法判定", "actual": None}
+            )
             continue
+        kind = item.get("kind") if item.get("kind") in {"prediction", "trigger"} else "legacy"
         metric = item.get("metric")
         target = _num(item.get("value"))
         actual = metrics.get(metric) if metric else None
-        if target is None or actual is None:
-            status = "无法判定" if metric not in SIGNAL_METRICS else "未触发"
+        if metric not in SIGNAL_METRICS or target is None or actual is None:
+            status = "无法判定"
+        elif kind == "trigger":
+            fired = actual >= target if item.get("op") == ">=" else actual <= target
+            status = "已触发" if fired else "未触发"
         else:
             ok = actual >= target if item.get("op") == ">=" else actual <= target
             status = "兑现" if ok else "落空"
         output.append(
             {
                 "signal": item.get("text") or f"{metric} {item.get('op')} {target}",
+                "kind": kind,
                 "metric": metric,
                 "op": item.get("op"),
                 "value": target,
@@ -396,7 +453,7 @@ def render(report: dict[str, Any], sentiment: dict[str, Any]) -> str:
         "## 昨日判断对照",
         str(report.get("yesterday") or "无"),
         "",
-        "## 明日观察（条件式）",
+        "## 明日观察（预测 / 触发）",
         *_li(_watch_text(report.get("watching"))),
         "",
         "## 风险",
@@ -464,12 +521,14 @@ def fallback(
         "yesterday": "无（规则版未做昨日对照）",
         "watching": [
             {
+                "kind": "prediction",
                 "metric": "limit_up",
                 "op": ">=",
                 "value": round(float(limit.get("up") or 0) * 1.2, 1),
                 "text": f"涨停家数回到 {int((limit.get('up') or 0) * 1.2)} 家以上",
             },
             {
+                "kind": "prediction",
                 "metric": "amount_yi",
                 "op": ">=",
                 "value": round(float(components.get("amount_yi") or 0) * 0.9, 1),
@@ -490,19 +549,22 @@ async def generate(
     sentiment: dict[str, Any],
     overview: dict[str, Any],
     previous: Optional[dict[str, Any]] = None,
+    today: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
+    """``today`` 是今日各指标的实际值，只用于校验「预测阈值是否锚在当日值上」。"""
     user = _prompt(sentiment, overview, previous)
     # deepseek-flash 的 reasoning_content 也算在 max_tokens 里：3000 会在长推理日
     # 直接截断成半截 JSON（2026-11-26 就这样退回规则版），所以这一段给足 8000。
     reply = await client.complete_json(SYSTEM, user, max_tokens=8000, temperature=0.2)
-    problems = _problems(reply, previous)
+    problems = _problems(reply, previous, today)
     if problems:
         repair = (
             "上一次输出缺少或不合规：" + "、".join(problems)
-            + "。只输出 JSON，字段齐全、数字只能来自数据、watching 每条都要带数字阈值。"
+            + "。只输出 JSON，字段齐全、数字只能来自数据；"
+            "watching 至少 2 条 prediction（阈值必须离今日值有明显差距）+ 最多 2 条 trigger。"
         )
         reply = await client.complete_json(SYSTEM, user + "\n\n" + repair, max_tokens=8000, temperature=0.1)
-        problems = _problems(reply, previous)
+        problems = _problems(reply, previous, today)
     if not problems:
         ok, ratio = numbers_ok(
             " ".join(str(reply.get(key) or "") for key in ("summary", "market_view", "sentiment_view", "money_view")),

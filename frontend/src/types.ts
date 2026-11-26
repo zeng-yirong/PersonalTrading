@@ -874,11 +874,13 @@ export interface TopicTodayHistoryItem {
 
 export interface DailySignalReview {
   signal: string
+  /** prediction 计入命中率；trigger 只看是否触发；legacy 是旧格式，两者都不计。 */
+  kind?: 'prediction' | 'trigger' | 'legacy'
   metric?: string
   op?: string
   value?: number | null
   actual: number | null
-  status: '兑现' | '落空' | '未触发' | '无法判定'
+  status: '兑现' | '落空' | '已触发' | '未触发' | '无法判定'
 }
 
 export interface DailyReview {
@@ -887,12 +889,22 @@ export interface DailyReview {
   signals: DailySignalReview[]
   hits?: number
   total?: number
+  trigger_fired?: number
+  trigger_total?: number
   status: '已判定' | '待验证'
 }
 
 export interface DailyReviewPayload {
   reviews: DailyReview[]
-  accuracy: { hits: number; total: number; rate: number | null }
+  accuracy: {
+    hits: number
+    total: number
+    rate: number | null
+    prediction?: { hits: number; total: number; rate: number | null }
+    trigger?: { fired: number; total: number; rate: number | null }
+    /** 旧格式观察条数：只显示，不进任何分母。 */
+    legacy?: { total: number }
+  }
 }
 
 export interface TopicToday {

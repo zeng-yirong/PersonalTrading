@@ -144,7 +144,10 @@ async def daily_brief(force: bool = False, model: str = "") -> dict[str, Any]:
 
     overview = market_overview.overview()
     previous = _previous_brief(sentiment.get("as_of"))
-    report = await daily.generate(client, sentiment, overview, previous)
+    today_metrics = sentiment_series.metrics_on(sentiment.get("as_of"))
+    report = await daily.generate(
+        client, sentiment, overview, previous, today=today_metrics
+    )
     usage = client.usage.as_dict()
     markdown = daily.render(report, sentiment)
     verdict = daily._stage_verdict(report.get("stage") or "中性")
@@ -214,6 +217,8 @@ def daily_review(limit: int = 8) -> dict[str, Any]:
     latest = latest_row[0] if latest_row and latest_row[0] else None
     reviews: list[dict[str, Any]] = []
     hits = total = 0
+    fired = triggers = 0
+    legacy = 0
     for item in rows:
         detail = store.get(item["id"]) or {}
         payload = detail.get("report") or {}
@@ -231,17 +236,30 @@ def daily_review(limit: int = 8) -> dict[str, Any]:
             )
             continue
         judged = daily.judge(signals, sentiment_series.metrics_on(next_day))
-        judged_count = sum(1 for entry in judged if entry["status"] in {"兑现", "落空"})
-        good = sum(1 for entry in judged if entry["status"] == "兑现")
+        # 命中率只统计 prediction；trigger 是"满足才买"的条件，问的是触发率。
+        predictions = [
+            entry for entry in judged
+            if entry["kind"] == "prediction" and entry["status"] in {"兑现", "落空"}
+        ]
+        trigger_rows = [
+            entry for entry in judged
+            if entry["kind"] == "trigger" and entry["status"] in {"已触发", "未触发"}
+        ]
+        legacy += sum(1 for entry in judged if entry["kind"] == "legacy")
+        good = sum(1 for entry in predictions if entry["status"] == "兑现")
         hits += good
-        total += judged_count
+        total += len(predictions)
+        fired += sum(1 for entry in trigger_rows if entry["status"] == "已触发")
+        triggers += len(trigger_rows)
         reviews.append(
             {
                 "as_of": str(item.get("as_of")),
                 "evaluated_as_of": next_day.isoformat(),
                 "signals": judged,
                 "hits": good,
-                "total": judged_count,
+                "total": len(predictions),
+                "trigger_fired": sum(1 for entry in trigger_rows if entry["status"] == "已触发"),
+                "trigger_total": len(trigger_rows),
                 "status": "已判定",
             }
         )
@@ -251,6 +269,17 @@ def daily_review(limit: int = 8) -> dict[str, Any]:
             "hits": hits,
             "total": total,
             "rate": round(hits / total * 100, 1) if total else None,
+            "prediction": {
+                "hits": hits,
+                "total": total,
+                "rate": round(hits / total * 100, 1) if total else None,
+            },
+            "trigger": {
+                "fired": fired,
+                "total": triggers,
+                "rate": round(fired / triggers * 100, 1) if triggers else None,
+            },
+            "legacy": {"total": legacy},
         },
     }
 

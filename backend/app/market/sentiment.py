@@ -253,19 +253,41 @@ SIGNAL_METRICS = {
     "north_net": "北向净流入(万元)",
 }
 
+# 预测型观察的"最小步长"：阈值离今天的实际值必须至少差这么多，否则等于把
+# "明天别比今天差"写成预测——那是硬币，不是判断（2026-11-26 的 6 条观察全部
+# 锚在当日值上，命中率因此没有信息量）。单位与指标自身一致。
+SIGNAL_STEPS = {
+    "score": 3.0,
+    "up_ratio": 3.0,
+    "above_ma20_ratio": 2.0,
+    "limit_up": 5.0,
+    "limit_down": 3.0,
+    "seal_rate": 3.0,
+    "amount_yi": 500.0,
+    "amount_ratio": 0.1,
+    "sector_up_ratio": 5.0,
+    "north_net": 50000.0,
+}
+
 
 def metrics_on(day) -> dict[str, float]:
     """One trading day's signal metrics, used to judge yesterday's watching list."""
+    if isinstance(day, str):          # 复盘报告里的 as_of 是 ISO 字符串
+        day = date.fromisoformat(day[:10])
     with store.session(read_only=True) as conn:
         start = day - timedelta(days=90)
         breadth = _breadth(conn, start, day)
         limits = _limits(conn, start, day)
         amounts = _amount(conn, start, day)
         sectors = _sectors(conn, start, day)
-        north_rows = conn.execute(
-            "SELECT CAST(north_money AS DOUBLE) FROM moneyflow_hsgt WHERE trade_date = ?",
-            [day],
-        ).fetchall()
+        north_rows = (
+            conn.execute(
+                "SELECT CAST(north_money AS DOUBLE) FROM moneyflow_hsgt WHERE trade_date = ?",
+                [day],
+            ).fetchall()
+            if store.table_exists(conn, "moneyflow_hsgt")
+            else []
+        )
 
     row = {**breadth.get(day, {}), **limits.get(day, {}), **sectors.get(day, {})}
     dates = sorted(value for value in amounts if value <= day)

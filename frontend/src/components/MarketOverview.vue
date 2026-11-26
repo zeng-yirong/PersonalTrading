@@ -59,6 +59,13 @@ const latestReview = computed(() => {
 })
 const accuracy = computed(() => reviewData.value?.accuracy ?? null)
 
+/** 兑现 / 已触发 都是"发生了"，落空是"没发生"，其余灰。 */
+function reviewStatusClass(status: string): string {
+  if (status === '兑现' || status === '已触发') return 'ok'
+  if (status === '落空') return 'bad'
+  return 'muted'
+}
+
 function distWidth(value: number): string {
   const rows = distribution.value
   const max = Math.max(1, ...rows.map((row) => row.count))
@@ -536,14 +543,25 @@ function breadthWidth(value: number): string {
           <div v-if="latestReview" class="brief-review">
             <div class="market-card-note">
               昨日观察对照（{{ latestReview.as_of }} → {{ latestReview.evaluated_as_of || '待次日收盘' }}）
-              <template v-if="accuracy && accuracy.total">｜近 {{ accuracy.total }} 条命中 {{ accuracy.hits }} 条（{{ accuracy.rate }}%）</template>
+              <template v-if="accuracy && accuracy.total">
+                ｜预测命中 {{ accuracy.hits }}/{{ accuracy.total }}（{{ accuracy.rate }}%）
+              </template>
+              <template v-if="accuracy?.trigger && accuracy.trigger.total">
+                ｜触发条件 {{ accuracy.trigger.fired }}/{{ accuracy.trigger.total }}（{{ accuracy.trigger.rate }}%）
+              </template>
+              <template v-if="accuracy?.legacy?.total">
+                ｜累计 {{ accuracy.legacy.total }} 条旧格式观察不计入
+              </template>
             </div>
             <div v-if="!latestReview.signals.length" class="market-brief-wait">
               还没有可判定的昨日观察，等下一交易日收盘后自动对照。
             </div>
             <div v-for="(sig, index) in latestReview.signals" :key="`sig-${index}`" class="brief-review-row">
-              <span class="review-status" :class="sig.status === '兑现' ? 'ok' : sig.status === '落空' ? 'bad' : 'muted'">{{ sig.status }}</span>
-              <span class="review-text">{{ sig.signal }}</span>
+              <span class="review-status" :class="reviewStatusClass(sig.status)">{{ sig.status }}</span>
+              <span class="review-text">
+                <span class="review-kind">{{ sig.kind === 'trigger' ? '触发' : sig.kind === 'legacy' ? '历史' : '预测' }}</span>
+                {{ sig.signal }}
+              </span>
               <span class="mono">{{ sig.actual ?? '—' }}</span>
             </div>
           </div>
