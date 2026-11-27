@@ -165,6 +165,38 @@ CREATE TABLE IF NOT EXISTS preset_batches (
     rows_json TEXT NOT NULL
 );
 
+-- 策略库：策略是实体，有状态、有来源、有留档理由。
+CREATE TABLE IF NOT EXISTS strategies (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    query_json TEXT NOT NULL,
+    params_json TEXT,
+    source TEXT,                 -- preset | factor_combo | neighbourhood | template | manual
+    status TEXT NOT NULL,        -- candidate | watch | champion | retired | paused
+    created_at TEXT NOT NULL,
+    promoted_at TEXT,
+    retired_at TEXT,
+    retire_reason TEXT,
+    notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_strategies_status ON strategies(status);
+
+-- 某条策略在某一批里的成绩（1 年 / 2 年两个窗口分别一行）。
+CREATE TABLE IF NOT EXISTS strategy_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    strategy_id TEXT NOT NULL,
+    batch_id INTEGER,
+    window TEXT NOT NULL,        -- 1y | 2y
+    start TEXT,
+    end TEXT,
+    metrics_json TEXT NOT NULL,
+    rank INTEGER,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_strategy_runs ON strategy_runs(strategy_id, window, id);
+
 CREATE TABLE IF NOT EXISTS paper_trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     position_id INTEGER,
@@ -279,6 +311,13 @@ def init_db() -> None:
     with connection() as conn:
         conn.executescript(SCHEMA)
         _migrate(conn)
+    # 首次启动把 presets.json 导入为 champion（幂等）。导入失败不该挡住启动。
+    try:
+        from app.strategy import store as strategy_store
+
+        strategy_store.seed_from_presets()
+    except Exception:  # noqa: BLE001 - 冷启动时策略表可能还没建好
+        pass
 
 
 def _migrate(conn) -> None:

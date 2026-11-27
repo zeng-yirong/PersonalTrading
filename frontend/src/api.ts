@@ -17,6 +17,9 @@
   OpsFingerprint,
   OpsHealth,
   PresetBatch,
+  StrategyList,
+  StrategyMetrics,
+  StrategyRow,
   PresetPayload,
   OpsRepair,
   OpsKind,
@@ -123,6 +126,23 @@ export const api = {
   screenerMeta: () =>
     request<{ as_of: string; symbols: number; cached: boolean }>('/screener/meta'),
   screenerPresets: () => request<PresetPayload>('/backtest/presets'),
+  strategies: (status = '') =>
+    request<StrategyList>(`/strategies${status ? `?status=${status}` : ''}`),
+  strategyStatus: (id: string, status: string, reason = '') =>
+    request<StrategyRow>(`/strategies/${encodeURIComponent(id)}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status, reason }),
+    }),
+  strategyClone: (id: string) =>
+    request<StrategyRow>(`/strategies/${encodeURIComponent(id)}/clone`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  strategyRun: (id: string) =>
+    request<{ strategy: StrategyRow; metrics: StrategyMetrics }>(
+      `/strategies/${encodeURIComponent(id)}/run`,
+      { method: 'POST', body: '{}' },
+    ),
   presetsRun: (rebalance = 20, topN = 10) =>
     request<PresetBatch>(`/backtest/presets/run?rebalance=${rebalance}&top_n=${topN}`, {
       method: 'POST',

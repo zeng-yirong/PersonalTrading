@@ -1056,6 +1056,7 @@ python scripts/backup_panel.py --out D:\bk --keep 3
 | 主题 | 主题研究 + 常用问题下拉 |
 | 策略回测 | **选股 + 回测**（2026-11-27 合并）：两个 tab 共用同一份条件。「选股」给当前截面（53 字段、12 个预设、命中数 / 分页）；「回测」把这份条件原样跑历史（**默认近一年**、20 日调仓、10 只等权，次日开盘成交 + 涨跌停/停牌约束 + 费用 + 复权，净值曲线 + 每期明细 + 留档）。切 tab 不跳模块；不经过选股也能粘一份条件 JSON 直接回测。预设按钮按**每周全量回测的超额排名**排序（周六 09:00 自动跑，`preset_batches` 留档最近 20 批） |
 | 模拟持仓 | 虚拟账户：持仓 / 现金 / 净值曲线 / 成交流水 / T+5、T+20 复盘；估值走复权口径。推演裁定可直接「按此裁定建仓」 |
+| 策略库（策略回测的第三个 tab） | 策略是**实体**：状态（正式 / 观察 / 候选 / 淘汰）、近一年与近二年的超额年化、最近 4 周趋势、最后复核日；操作：升级、降级、淘汰（要写理由并留档）、克隆、单条重跑。每周六 09:00 全量跑一遍（两个窗口），排名只影响顺序，**改状态必须人工点按钮** |
 | 因子 | 因子评估（panel / Alpha158 / 学术 / GTJA / 基本面） |
 | 运维 | 账本 / 成本 / 数据健康，账本每行可展开「决策链」 |
 
@@ -1119,6 +1120,13 @@ python scripts/backup_panel.py --out D:\bk --keep 3
 | GET | `/api/backtest/meta` | 回测参数、面板区间、费用模型、可用字段 |
 | POST | `/api/backtest/run` | 按选股条件跑一次回测并入库 |
 | GET | `/api/backtest/runs?limit=20` | 回测历史（指标摘要） |
+| GET | `/api/backtest/presets` | 预设清单 + 最近一批全量排名 |
+| POST | `/api/backtest/presets/run` | 立即触发全量回测（12 条 × 2 个窗口，约 2–4 分钟） |
+| GET | `/api/strategies?status=` | 策略库（状态 / 近一年 / 近二年 / 4 周趋势 / 复核日） |
+| POST | `/api/strategies` | 新建策略（条件 JSON） |
+| POST | `/api/strategies/{id}/status` | 升级 / 降级 / 淘汰（淘汰必须带 reason） |
+| POST | `/api/strategies/{id}/clone` | 克隆为候选 |
+| POST | `/api/strategies/{id}/run` | 单条重跑近一年并写入 `strategy_runs` |
 | GET | `/api/backtest/runs/{id}` | 单次回测的完整结果（净值/每期/成交） |
 | GET | `/api/topics/meta` | 面板日期、模型状态、示例主题、行业清单 |
 | GET | `/api/topics/context?topic=` | 某主题的数据快照（不调用模型） |

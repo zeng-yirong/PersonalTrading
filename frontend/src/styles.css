@@ -3790,3 +3790,16 @@ details.note summary {
   cursor: pointer;
   font-size: 12px;
 }
+/* ---------- 策略库：状态徽标 ---------- */
+.strategy-status {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  border: 1px solid currentColor;
+}
+.status-champion { color: var(--accent); }
+.status-watch { color: var(--down, #23c483); }
+.status-candidate { color: var(--muted); }
+.status-retired { color: var(--up, #ff5d5d); opacity: 0.8; }
+.status-paused { color: var(--muted); }

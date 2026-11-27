@@ -474,6 +474,44 @@ export interface PresetBatch {
   rows: PresetRankRow[]
 }
 
+/** 策略库一行：状态 + 1年/2年成绩 + 4 周趋势。 */
+export interface StrategyMetrics {
+  periods?: number | null
+  total_return_pct?: number | null
+  cagr_pct?: number | null
+  excess_cagr_pct?: number | null
+  max_drawdown_pct?: number | null
+  hit_rate_pct?: number | null
+  exposure_pct?: number | null
+  trades?: number | null
+}
+
+export type StrategyStatus = 'candidate' | 'watch' | 'champion' | 'retired' | 'paused'
+
+export interface StrategyRow {
+  id: string
+  name: string
+  status: StrategyStatus
+  source?: string | null
+  notes?: string | null
+  created_at?: string | null
+  promoted_at?: string | null
+  retired_at?: string | null
+  retire_reason?: string | null
+  query: ScreenQueryPayload
+  params?: Record<string, number>
+  year1?: StrategyMetrics | null
+  year2?: StrategyMetrics | null
+  trend?: number[]
+  last_checked?: string | null
+  rank?: number | null
+}
+
+export interface StrategyList {
+  count: number
+  strategies: StrategyRow[]
+}
+
 export interface PresetPayload {
   presets: PresetItem[]
   batch: PresetBatch | null

@@ -23,6 +23,7 @@ from app.routers import (
     research,
     screener,
     stocks,
+    strategy,
     topics,
     watchlist,
 )
@@ -71,6 +72,7 @@ app.include_router(backtest.router)
 app.include_router(topics.router)
 app.include_router(factors.router)
 app.include_router(paper.router)
+app.include_router(strategy.router)
 app.include_router(ops.router)
 
 
