@@ -125,8 +125,18 @@ def prompt_suffix(role: str) -> str:
 
 
 def label() -> str:
-    """`equity-desk@v0.1` for the active set, `""` when there are none."""
+    """`equity-desk@v0.1,...` for every active skill (status endpoint)."""
     return ",".join(skill.label for skill in active())
+
+
+def labels_for(roles: tuple[str, ...]) -> str:
+    """只取这些角色实际加载的技能——一次推演不该记成"五个技能都用了"。"""
+    labels: list[str] = []
+    for role in roles:
+        skill = for_role(role)
+        if skill and skill.label not in labels:
+            labels.append(skill.label)
+    return ",".join(labels)
 
 
 def describe() -> list[dict[str, object]]:

@@ -285,7 +285,7 @@ async def stream_research(
         return
 
     name = ctx["profile"]["name"]
-    skill_label = skills.label()
+    skill_label = skills.labels_for(("trader", "risk_manager"))
     run_id = None
     if persist:
         run_id = await asyncio.to_thread(
