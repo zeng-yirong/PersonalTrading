@@ -6,9 +6,8 @@
     python scripts/daily_run.py --symbol 600519   # 指定标的
     python scripts/daily_run.py --rounds 2
 
-选股规则是**确定性轮转**，不是"挑一个今天想看的"：有自选就用自选，自选为空就用
-当日成交额前 50 的 A 股（剔除 ST 与北交所），按「日期序数 % 池大小」轮转，并跳过
-最近 5 天推演过的标的。同一天重跑会得到同一只，省得复盘时说不清样本怎么来的。
+选股规则见 :mod:`app.agents.daily`：自选（为空则当日成交额前 50）按日期序数轮转，
+跳过最近 5 天推过的标的。收盘后的三段式用 `scripts/daily_chain.py`，它复用同一套规则。
 """
 
 from __future__ import annotations
@@ -16,85 +15,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from datetime import date, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "backend"))
 
-from app.agents import runner  # noqa: E402
-from app.data import store  # noqa: E402
-from app.db import connection, init_db, list_watchlist  # noqa: E402
-
-RECENT_DAYS = 5
-POOL_FALLBACK = 50
-
-
-def _recent_symbols(days: int = RECENT_DAYS) -> set[str]:
-    """最近几天已经推演过的标的：轮转时要避开，别连着两天研究同一只。"""
-    since = (date.today() - timedelta(days=days)).isoformat()
-    with connection() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT symbol FROM agent_runs WHERE started_at >= ?", (since,)
-        ).fetchall()
-    return {row[0] for row in rows}
-
-
-def _runs_today() -> int:
-    with connection() as conn:
-        return int(
-            conn.execute(
-                "SELECT COUNT(*) FROM agent_runs WHERE started_at LIKE ?",
-                (date.today().isoformat() + "%",),
-            ).fetchone()[0]
-        )
-
-
-def candidate_pool() -> tuple[list[dict], str]:
-    watch = list_watchlist()
-    if watch:
-        return (
-            [{"symbol": item["symbol"], "name": item.get("name")} for item in watch],
-            "自选",
-        )
-    rows = store.get_snapshot(asset_type="stock", limit=POOL_FALLBACK + 10)
-    rows = [
-        row
-        for row in rows
-        if (row.get("symbol") or "")[:1] in "0123" and "ST" not in (row.get("name") or "")
-    ]
-    return rows[:POOL_FALLBACK], "当日成交额前 50（自选为空）"
-
-
-def pick(pool: list[dict], today: date, skip: set[str]) -> dict:
-    if not pool:
-        raise SystemExit("候选池为空：既没有自选，面板也没有当日截面")
-    index = today.toordinal() % len(pool)
-    for step in range(len(pool)):
-        item = pool[(index + step) % len(pool)]
-        if item["symbol"] not in skip:
-            return item
-    return pool[index]          # 全推过了就用轮到的那只
-
-
-async def _run(symbol: str, rounds: int | None) -> int:
-    result = await runner.run_research(symbol, rounds)
-    final = result.get("final") or {}
-    if final.get("type") == "error":
-        print(f"[失败] {final.get('message')}", file=sys.stderr)
-        return 1
-    verdict = final.get("verdict") or {}
-    usage = final.get("usage") or {}
-    name = final.get("name") or (store.get_symbol(symbol) or {}).get("name") or ""
-    print(
-        f"✅ 今日推演：{symbol} {name}｜裁定 {verdict.get('decision') or '—'} "
-        f"{verdict.get('final_position_pct')}%｜{usage.get('calls', 0)} 次调用 "
-        f"{usage.get('total_tokens', 0):,} tokens｜{(final.get('duration_ms') or 0) / 1000:.0f}s"
-        f"｜记录 #{final.get('run_id')}"
-    )
-    for item in final.get("errors") or []:
-        print(f"  ! {item}")
-    return 0
+from app.agents import daily  # noqa: E402
+from app.db import init_db  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -107,22 +34,21 @@ def main(argv: list[str] | None = None) -> int:
 
     init_db()
     if args.if_due:
-        done = _runs_today()
+        done = daily.runs_today()
         if done:
             print(f"今天已有 {done} 次推演，跳过（--if-due）")
             return 0
 
-    if args.symbol:
-        target = {"symbol": args.symbol, "name": ""}
-        source = "指定"
-    else:
-        pool, source = candidate_pool()
-        target = pick(pool, date.today(), _recent_symbols())
-    print(f"候选池：{source}｜今天轮到 {target['symbol']} {target.get('name') or ''}".rstrip())
+    target = daily.choose(args.symbol or "")
+    print(f"候选池：{target.line()}")
     if args.pick:
         return 0
 
-    return asyncio.run(_run(target["symbol"], args.rounds))
+    result = asyncio.run(daily.run_once(target.symbol, args.rounds))
+    print(f"✅ 今日推演：{daily.describe(result)}")
+    for item in result.get("errors") or []:
+        print(f"  ! {item}")
+    return 0 if result.get("ok") else 1
 
 
 if __name__ == "__main__":
