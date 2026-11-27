@@ -87,9 +87,12 @@ async def run_query(payload: QueryModel) -> dict:
     except QueryError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
-        return await run_in_threadpool(screen_query.run, parsed)
+        result = await run_in_threadpool(screen_query.run, parsed)
     except QueryError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # 前端「用这些条件回测」要拿回解析后的条件，不能只给行。
+    result["query"] = parsed.to_dict()
+    return result
 
 
 @router.post("/ask")
@@ -106,6 +109,9 @@ async def ask(payload: AskModel) -> dict:
     # The DuckDB query is blocking; keep it off the event loop so SSE streams
     # and other requests are not stalled behind a full-market scan.
     try:
-        return await run_in_threadpool(screen_query.run, parsed)
+        result = await run_in_threadpool(screen_query.run, parsed)
     except QueryError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # 回测交接需要这份条件；少了它，前端按钮永远是灰的（2026-11-27 的 bug）。
+    result["query"] = parsed.to_dict()
+    return result

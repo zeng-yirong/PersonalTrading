@@ -186,3 +186,43 @@ def test_from_dict_rejects_bad_shapes():
         screen_query.ScreenQuery.from_dict(
             {"filters": [{"field": "pe_ttm", "op": "<", "value": 1}] * 13}
         )
+
+# ------------------------------------------------- 回测交接：/ask 必须带回条件
+def test_ask_response_carries_the_parsed_query(snapshot, monkeypatch):
+    """前端「用这些条件回测」靠 result.query 启用；2026-11-27 之前 /ask 不返回它。"""
+    import asyncio
+
+    from app.routers import screener as screener_router
+
+    parsed = screen_query.ScreenQuery.from_dict(
+        {
+            "title": "低估值",
+            "filters": [{"field": "pe_ttm", "op": "<=", "value": 30}],
+            "limit": 5,
+        }
+    )
+
+    async def fake_parse(text: str, limit: int = 30):
+        return parsed
+
+    monkeypatch.setattr(screener_router.nl, "parse", fake_parse)
+
+    result = asyncio.run(screener_router.ask(screener_router.AskModel(text="市盈率低于30", limit=5)))
+
+    assert result["query"]["filters"] == [{"field": "pe_ttm", "op": "<=", "value": 30}]
+    assert result["query"]["limit"] == 5
+    assert result["total_matched"] == 2          # 茅台 pe22 + 平安 pe5；300750 名字含 ST 被排除
+
+
+def test_run_response_also_carries_the_query(snapshot):
+    import asyncio
+
+    from app.routers import screener as screener_router
+
+    payload = {
+        "filters": [{"field": "pe_ttm", "op": "<=", "value": 30}],
+        "limit": 5,
+    }
+    result = asyncio.run(screener_router.run_query(screener_router.QueryModel(**payload)))
+
+    assert result["query"]["filters"] == payload["filters"]

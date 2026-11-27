@@ -12,6 +12,7 @@ pretending everything is from today.
 
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from typing import Any, Optional
 
@@ -282,15 +283,18 @@ def build(trade_date: Optional[date] = None) -> dict[str, Any]:
         }
         conn.execute(_sql(latest, aux))
         rows = conn.execute(f"SELECT COUNT(*) FROM {SNAPSHOT_NAME}").fetchone()[0]
+        sources = {name: (value.isoformat() if value else None) for name, value in aux.items()}
+        # sources 也要落库：只在"重建那一次"返回的话，缓存命中时前端就看到 null，
+        # 会以为所有数据源都没有日期。
         conn.execute(
             "CREATE OR REPLACE TABLE screen_meta AS "
-            "SELECT ?::DATE AS trade_date, now() AS built_at",
-            [latest],
+            "SELECT ?::DATE AS trade_date, now() AS built_at, ? AS sources_json",
+            [latest, json.dumps(sources, ensure_ascii=False)],
         )
     return {
         "trade_date": latest.isoformat(),
         "symbols": int(rows),
-        "sources": {name: (value.isoformat() if value else None) for name, value in aux.items()},
+        "sources": sources,
     }
 
 
@@ -299,7 +303,18 @@ def ensure_built() -> dict[str, Any]:
     state: Optional[dict[str, Any]] = None
     try:
         with store.session(read_only=True) as conn:
-            meta = conn.execute("SELECT trade_date, built_at FROM screen_meta").fetchone()
+            try:
+                meta = conn.execute(
+                    "SELECT trade_date, built_at, sources_json FROM screen_meta"
+                ).fetchone()
+            except Exception:  # noqa: BLE001 - 老库的 screen_meta 还没有这一列
+                meta = conn.execute("SELECT trade_date, built_at FROM screen_meta").fetchone()
+            sources: Optional[dict[str, Any]] = None
+            if meta is not None and len(meta) > 2 and meta[2]:
+                try:
+                    sources = json.loads(meta[2])
+                except json.JSONDecodeError:
+                    sources = None
             latest = conn.execute("SELECT MAX(trade_date) FROM daily").fetchone()[0]
             existing = {
                 row[1]
@@ -310,10 +325,26 @@ def ensure_built() -> dict[str, Any]:
                 if existing
                 else 0
             )
+            # 老库的 screen_meta 没有 sources_json：缓存命中时现算一次（7 个
+            # MAX(date) 查询，毫秒级），下一次重建会把它写进表里。
+            if sources is None and count:
+                sources = {
+                    name: (
+                        value.isoformat()
+                        if (value := _latest_date(conn, name, column, latest))
+                        else None
+                    )
+                    for name, column in AUX_TABLES.items()
+                }
         # A new field in COLUMNS means the code changed: the cached table is stale.
         missing = set(COLUMNS) - existing
         if count and meta and latest and meta[0] == latest and not missing:
-            state = {"trade_date": meta[0].isoformat(), "symbols": int(count), "cached": True}
+            state = {
+                "trade_date": meta[0].isoformat(),
+                "symbols": int(count),
+                "cached": True,
+                "sources": sources,
+            }
     except Exception:  # noqa: BLE001 - tables missing on first run
         state = None
 
