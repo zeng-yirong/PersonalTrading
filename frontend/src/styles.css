@@ -3714,3 +3714,51 @@ details.note summary {
   border: 1px solid var(--border);
   cursor: default;
 }
+/* ---------- 策略模块：选股 / 回测 两个 tab ---------- */
+.strategy-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.strategy-tab {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.strategy-tab.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft, rgba(80, 140, 255, 0.12));
+}
+.strategy-json {
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.strategy-json summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.strategy-json textarea {
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-soft, transparent);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  resize: vertical;
+}
+.strategy-json-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}

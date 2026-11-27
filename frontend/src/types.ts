@@ -26,13 +26,12 @@ export interface QuestionGroup {
   questions: string[]
 }
 
-/** 左侧导航分区。 */
+/** 左侧导航分区。选股与回测合并为「策略」（2026-11-27）。 */
 export type SectionKey =
   | 'market'
   | 'watchlist'
   | 'universe'
-  | 'screen'
-  | 'backtest'
+  | 'strategy'
   | 'topic'
   | 'factor'
   | 'agent'

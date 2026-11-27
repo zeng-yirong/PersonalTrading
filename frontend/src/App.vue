@@ -6,7 +6,6 @@ import type {
   MarketOverview,
   Meta,
   ResearchNote,
-  ScreenQueryPayload,
   SearchResult,
   SectionKey,
   StockContextPayload,
@@ -16,11 +15,10 @@ import type {
 } from './types'
 import AppSidebar from './components/AppSidebar.vue'
 import AgentSection from './components/AgentSection.vue'
-import BacktestSection from './components/BacktestSection.vue'
+import StrategyPanel from './components/StrategyPanel.vue'
 import FactorPanel from './components/FactorPanel.vue'
 import MarketOverviewPanel from './components/MarketOverview.vue'
 import OpsPanel from './components/OpsPanel.vue'
-import ScreenPanel from './components/ScreenPanel.vue'
 import SectionBoundary from './components/SectionBoundary.vue'
 import StockContextMenu from './components/StockContextMenu.vue'
 import StockDetail from './components/StockDetail.vue'
@@ -48,7 +46,7 @@ const researchLoading = ref(false)
 
 const watchBusy = ref(false)
 const toast = ref('')
-const backtestSectionRef = ref<InstanceType<typeof BacktestSection> | null>(null)
+
 const contentScroll = ref<HTMLDivElement | null>(null)
 let savedSectionScroll = 0
 
@@ -328,16 +326,6 @@ async function generateResearch() {
   }
 }
 
-async function onBacktest(query: ScreenQueryPayload) {
-  section.value = 'backtest'
-  detailSymbol.value = null
-  menu.open = false
-  await nextTick()
-  contentScroll.value?.scrollTo({ top: 0 })
-  if (!backtestSectionRef.value) await nextTick()
-  await backtestSectionRef.value?.runWith(query)
-}
-
 function onKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
   if (menu.open) {
@@ -424,15 +412,8 @@ onBeforeUnmount(() => {
               @select="onSelectRef"
               @context="openContext"
             />
-            <ScreenPanel
-              v-else-if="section === 'screen'"
-              @select="onSelectSymbol"
-              @backtest="onBacktest"
-              @context="openContext"
-            />
-            <BacktestSection
-              v-else-if="section === 'backtest'"
-              ref="backtestSectionRef"
+            <StrategyPanel
+              v-else-if="section === 'strategy'"
               @select="onSelectSymbol"
               @context="openContext"
             />
