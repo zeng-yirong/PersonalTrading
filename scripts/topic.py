@@ -20,6 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "backend"))
 
 from app.agents.llm import LLMError  # noqa: E402
 from app.db import init_db  # noqa: E402
+from app.market.freshness import wait_until_fresh  # noqa: E402
 from app.topic import service  # noqa: E402
 from app.topic.service import TopicError  # noqa: E402
 
@@ -128,7 +129,26 @@ async def run_today(args: argparse.Namespace) -> int:
 
     Scheduled right after the 18:00 sync so every trading day has a brief; the
     brief's `watching` list is what the next day's reconciliation scores.
+
+    前置检查：18:00 日更逐表写，但 `index_daily` / `sw_daily` 晚于 `daily` 落库。
+    抢在中间生成时，快照里指数为空、行业占比为 null，模型会把这些同步竞态写成
+    "数据缺口"（2026-11-27 的 #22 就是）。所以先等面板写完，默认 3×30 秒。
     """
+    if not args.no_wait:
+        state = wait_until_fresh(args.wait_tries, args.wait_seconds)
+        if state["ready"]:
+            if state["attempts"]:
+                print(
+                    f"面板已就绪（等了 {state['waited_seconds']} 秒）："
+                    f"面板 {state['panel']}｜指数 {state['index_daily']}｜申万 {state['sw_daily']}"
+                )
+        else:
+            print(
+                "[警告] 面板可能还没写完，仍然生成：" + "；".join(state["missing"])
+                + "。同步完成后可用 --force 重新生成。",
+                file=sys.stderr,
+            )
+
     try:
         result = await service.daily_brief(force=args.force, model=args.model or "")
     except (TopicError, LLMError) as exc:
@@ -165,6 +185,13 @@ def main() -> int:
     parser.add_argument("--context", action="store_true", help="只看数据快照，不调用模型")
     parser.add_argument("--today", action="store_true", help="生成当日「一键复盘」（写入库，非交易日也可跑）")
     parser.add_argument("--force", action="store_true", help="配合 --today：忽略当天缓存，强制重算")
+    parser.add_argument(
+        "--wait-tries", type=int, default=3, help="--today 前置检查：面板没写完时最多等几次（默认 3）"
+    )
+    parser.add_argument(
+        "--wait-seconds", type=float, default=30.0, help="--today 前置检查：每次等待秒数（默认 30）"
+    )
+    parser.add_argument("--no-wait", action="store_true", help="--today 不等待，直接生成")
     parser.add_argument("--model", help="覆盖默认模型")
     parser.add_argument("--source-run", type=int, help="关联的推演编号")
     parser.add_argument("--list", action="store_true", help="列出历史报告")
