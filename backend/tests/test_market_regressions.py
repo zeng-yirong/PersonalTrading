@@ -230,3 +230,40 @@ def test_deep_history_uses_incremental_window(panel, monkeypatch):
     sync.sync_history(incremental=True, start=date(2021, 1, 1))
     last = deep_start + timedelta(days=199)
     assert requested == [last - timedelta(days=sync.OVERLAP_DAYS)]
+
+# ------------------------------------------------------------ 大盘指数清单
+def test_overview_shows_the_eight_benchmarks_in_display_order(panel):
+    """首页指数卡片的顺序是需求的一部分：科创综指第 3、上证50 第 5。"""
+    from app.market import overview
+
+    store.upsert_calendar([(date(2026, 11, 27), True)], "test")
+    store.upsert_daily([_bar("600519", "2026-11-27")], "test")
+    store.ensure_dataset_table(
+        "index_daily",
+        {
+            "ts_code": "VARCHAR",
+            "trade_date": "DATE",
+            "close": "DOUBLE",
+            "pct_chg": "DOUBLE",
+            "amount": "DOUBLE",
+        },
+        ("ts_code", "trade_date"),
+    )
+    store.write_dataset(
+        "index_daily",
+        ["ts_code", "trade_date", "close", "pct_chg", "amount"],
+        ("ts_code", "trade_date"),
+        [
+            {"ts_code": code, "trade_date": "2026-11-27", "close": 100.0 + index,
+             "pct_chg": 1.0, "amount": 1e8}
+            for index, (code, _label) in enumerate(overview.INDICES)
+        ],
+    )
+
+    data = overview.overview()
+    items = data["indices"]
+
+    assert [item["code"] for item in items] == [code for code, _ in overview.INDICES]
+    assert len(items) == 8
+    assert items[2]["label"] == "科创综指" and items[2]["code"] == "000680.SH"
+    assert items[4]["label"] == "上证50" and items[4]["code"] == "000016.SH"
