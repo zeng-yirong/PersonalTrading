@@ -1,10 +1,10 @@
-"""Backtest specification: validate everything before a single SQL statement runs.
+﻿"""Backtest specification: validate everything before a single SQL statement runs.
 
 The rule is the screener's rule: a closed catalogue, explicit bounds, and errors
 that say what to do instead. Nothing here touches the panel.
 
 Defaults are chosen so that one call with a query and no dates still produces a
-usable two-year, monthly-rebalanced, ten-name portfolio.
+usable one-year, monthly-rebalanced, ten-name portfolio.
 """
 
 from __future__ import annotations
@@ -122,7 +122,7 @@ def from_dict(
         raise BacktestError("面板里还没有行情，无法回测")
     start = _date(payload.get("start"), "start")
     if start is None:
-        start = end - timedelta(days=730)
+        start = end - timedelta(days=365)
 
     if panel_end and end > panel_end:
         warnings.append(f"回测结束日 {end} 晚于面板最新日期，已截断到 {panel_end}")
@@ -183,7 +183,7 @@ def describe() -> dict[str, Any]:
             "initial_cash": DEFAULT_CASH,
             "slippage_bps": DEFAULT_SLIPPAGE_BPS,
             "benchmark": DEFAULT_BENCHMARK,
-            "lookback_years": 2,
+            "lookback_years": 1,
         },
         "limits": {
             "top_n": MAX_TOP_N,

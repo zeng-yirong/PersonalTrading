@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import * as echarts from 'echarts'
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import { api } from '../api'
@@ -243,7 +243,7 @@ async function loadMeta() {
     benchmark.value = data.defaults.benchmark
     if (data.panel.end) {
       endDate.value = data.panel.end
-      startDate.value = shiftYears(data.panel.end, data.defaults.lookback_years || 2)
+      startDate.value = shiftYears(data.panel.end, data.defaults.lookback_years || 1)
     }
   } catch (exc) {
     error.value = `回测配置加载失败：${messageOf(exc)}`

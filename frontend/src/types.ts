@@ -1,4 +1,4 @@
-export type AssetType = 'stock' | 'etf'
+﻿export type AssetType = 'stock' | 'etf'
 
 export interface WatchlistItem {
   symbol: string
@@ -26,12 +26,13 @@ export interface QuestionGroup {
   questions: string[]
 }
 
-/** 左侧导航分区。选股与回测合并为「策略」（2026-11-27）。 */
+/** 左侧导航分区。选股与回测合并为「策略回测」，模拟持仓独立（2026-11-27）。 */
 export type SectionKey =
   | 'market'
   | 'watchlist'
   | 'universe'
   | 'strategy'
+  | 'paper'
   | 'topic'
   | 'factor'
   | 'agent'
@@ -436,6 +437,47 @@ export interface ScreenQueryPayload {
   universe?: Record<string, any>
   sort?: Array<{ field: string; desc: boolean }>
   limit?: number
+}
+
+/** 预设策略：text 给人看，后端另有一份等价 query。 */
+export interface PresetItem {
+  id: string
+  label: string
+  text: string
+}
+
+export interface PresetRankRow {
+  id: string
+  label: string
+  text: string
+  rank: number
+  status: string
+  error?: string
+  start?: string | null
+  end?: string | null
+  periods?: number | null
+  total_return_pct?: number | null
+  cagr_pct?: number | null
+  excess_cagr_pct?: number | null
+  max_drawdown_pct?: number | null
+  hit_rate_pct?: number | null
+  exposure_pct?: number | null
+}
+
+export interface PresetBatch {
+  id?: number
+  created_at: string
+  start: string | null
+  end: string | null
+  rebalance: number
+  top_n: number
+  rows: PresetRankRow[]
+}
+
+export interface PresetPayload {
+  presets: PresetItem[]
+  batch: PresetBatch | null
+  rank_field: string
 }
 
 export interface ScreenResult {

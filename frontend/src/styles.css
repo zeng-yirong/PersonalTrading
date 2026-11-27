@@ -3762,3 +3762,31 @@ details.note summary {
   gap: 8px;
   margin-top: 6px;
 }
+/* ---------- 选股：预设排名 ---------- */
+.preset-rank {
+  color: var(--accent);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.preset-ranking {
+  margin-top: 10px;
+  font-size: 12px;
+}
+.preset-ranking summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.preset-ranking-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+}

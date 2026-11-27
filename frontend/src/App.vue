@@ -16,6 +16,7 @@ import type {
 import AppSidebar from './components/AppSidebar.vue'
 import AgentSection from './components/AgentSection.vue'
 import StrategyPanel from './components/StrategyPanel.vue'
+import PaperPanel from './components/PaperPanel.vue'
 import FactorPanel from './components/FactorPanel.vue'
 import MarketOverviewPanel from './components/MarketOverview.vue'
 import OpsPanel from './components/OpsPanel.vue'
@@ -414,6 +415,11 @@ onBeforeUnmount(() => {
             />
             <StrategyPanel
               v-else-if="section === 'strategy'"
+              @select="onSelectSymbol"
+              @context="openContext"
+            />
+            <PaperPanel
+              v-else-if="section === 'paper'"
               @select="onSelectSymbol"
               @context="openContext"
             />

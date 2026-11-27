@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 import type { ScreenQueryPayload, StockContextPayload } from '../types'
 import BacktestPanel from './BacktestPanel.vue'
-import PaperPanel from './PaperPanel.vue'
 
 const backtest = ref<InstanceType<typeof BacktestPanel> | null>(null)
 
@@ -20,7 +19,6 @@ defineExpose({ runWith })
 
 <template>
   <div class="section-stack">
-    <BacktestPanel ref="backtest" />
-    <PaperPanel @select="emit('select', $event)" @context="emit('context', $event)" />
+    <BacktestPanel ref="backtest" @select="emit('select', $event)" @context="emit('context', $event)" />
   </div>
 </template>

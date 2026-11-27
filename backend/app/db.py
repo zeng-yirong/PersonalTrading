@@ -153,6 +153,18 @@ CREATE TABLE IF NOT EXISTS skill_calls (
 
 CREATE INDEX IF NOT EXISTS idx_skill_calls_module ON skill_calls(module, created_at);
 
+-- 每周把全部预设策略跑一遍近一年回测，结果按超额排序留档。
+CREATE TABLE IF NOT EXISTS preset_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    as_of TEXT,
+    start TEXT,
+    end TEXT,
+    rebalance INTEGER,
+    top_n INTEGER,
+    rows_json TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS paper_trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     position_id INTEGER,

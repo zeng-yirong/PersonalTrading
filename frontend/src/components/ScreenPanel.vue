@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api'
 import type {
+  PresetBatch,
   ScreenField,
   ScreenQueryPayload,
   ScreenResult,
@@ -23,7 +24,7 @@ const asOf = ref('')
 const symbolCount = ref(0)
 const showQuery = ref(false)
 
-const PRESETS: { label: string; text: string }[] = [
+const PRESETS_FALLBACK: { label: string; text: string }[] = [
   { label: '低估值蓝筹', text: '市盈率低于15、ROE大于15%、市值超过500亿' },
   { label: '高成长', text: '营收增速大于25%、净利润增速大于25%、市盈率低于60' },
   { label: '高股息防御', text: '股息率超过4%、市盈率低于20、资产负债率低于60' },
@@ -37,6 +38,53 @@ const PRESETS: { label: string; text: string }[] = [
   { label: '公告后强势', text: '公告后漂移大于5、市盈率低于40、成交额大于1亿' },
   { label: '涨停回踩', text: '近5日涨停、换手率大于5、市盈率低于60' },
 ]
+
+const presets = ref<{ id?: string; label: string; text: string }[]>(PRESETS_FALLBACK)
+const batch = ref<PresetBatch | null>(null)
+const rankBusy = ref(false)
+const rankNote = ref('')
+
+/** 预设按最近一批回测排名排序；没排到的排在后面（保持原顺序）。 */
+const orderedPresets = computed(() => {
+  const rows = batch.value?.rows ?? []
+  if (!rows.length) return presets.value
+  const rank = new Map(rows.map((row) => [row.label, row.rank]))
+  return [...presets.value].sort((a, b) => {
+    const ra = rank.get(a.label) ?? 999
+    const rb = rank.get(b.label) ?? 999
+    return ra === rb ? 0 : ra - rb
+  })
+})
+
+function rankOf(label: string): number | null {
+  const row = batch.value?.rows.find((item) => item.label === label)
+  return row?.rank ?? null
+}
+
+async function loadPresets() {
+  try {
+    const data = await api.screenerPresets()
+    if (data.presets?.length) presets.value = data.presets
+    batch.value = data.batch ?? null
+  } catch (exc) {
+    // 接口挂了也要能筛股：退回内置预设，只是没有排名
+    rankNote.value = `排名加载失败：${exc instanceof Error ? exc.message : String(exc)}`
+  }
+}
+
+async function runRanking() {
+  if (rankBusy.value) return
+  rankBusy.value = true
+  rankNote.value = '全量回测中（12 个预设 × 近一年，约 30–90 秒）…'
+  try {
+    batch.value = await api.presetsRun()
+    rankNote.value = `已更新：${batch.value?.created_at?.slice(0, 16) ?? ''}`
+  } catch (exc) {
+    rankNote.value = `全量回测失败：${exc instanceof Error ? exc.message : String(exc)}`
+  } finally {
+    rankBusy.value = false
+  }
+}
 
 const visibleFields = computed(() => {
   if (!result.value) return []
@@ -102,6 +150,7 @@ function openContext(row: Record<string, unknown>, event: MouseEvent) {
 }
 
 onMounted(async () => {
+  void loadPresets()
   try {
     const [fieldList, meta] = await Promise.all([api.screenerFields(), api.screenerMeta()])
     fields.value = Object.fromEntries(fieldList.fields.map((item) => [item.name, item]))
@@ -111,6 +160,12 @@ onMounted(async () => {
     /* screener is optional: a panel without the catalogue still renders */
   }
 })
+
+/** 表格里的百分比：null 显示 —，0 位小数用于胜率/仓位。 */
+function pct(value: number | null | undefined, digits = 2): string {
+  if (value === null || value === undefined) return '—'
+  return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}%`
+}
 </script>
 
 <template>
@@ -138,16 +193,64 @@ onMounted(async () => {
 
     <div class="screen-presets">
       <button
-        v-for="preset in PRESETS"
+        v-for="preset in orderedPresets"
         :key="preset.label"
         class="chip"
         :disabled="loading"
-        :title="preset.text"
+        :title="rankOf(preset.label) ? `近一年超额排名第 ${rankOf(preset.label)}` : preset.text"
         @click="run(preset.text)"
       >
+        <span v-if="rankOf(preset.label)" class="preset-rank">#{{ rankOf(preset.label) }}</span>
         {{ preset.label }}
       </button>
     </div>
+
+    <details v-if="batch?.rows?.length" class="preset-ranking">
+      <summary>
+        预设策略近一年排名（{{ batch.start }} → {{ batch.end }}，按超额年化）
+        ｜更新于 {{ (batch.created_at || '').slice(0, 16) }}
+      </summary>
+      <div class="screen-table-wrap">
+        <table class="screen-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>预设</th>
+              <th>区间收益</th>
+              <th>年化</th>
+              <th>超额年化</th>
+              <th>最大回撤</th>
+              <th>胜率</th>
+              <th>仓位</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in batch.rows" :key="row.id">
+              <td class="mono">{{ row.rank }}</td>
+              <td>
+                <button type="button" class="link-btn" @click="run(row.text)">{{ row.label }}</button>
+              </td>
+              <td class="mono" :class="(row.total_return_pct ?? 0) >= 0 ? 'up' : 'down'">
+                {{ pct(row.total_return_pct) }}
+              </td>
+              <td class="mono">{{ pct(row.cagr_pct) }}</td>
+              <td class="mono" :class="(row.excess_cagr_pct ?? 0) >= 0 ? 'up' : 'down'">
+                {{ pct(row.excess_cagr_pct) }}
+              </td>
+              <td class="mono">{{ pct(row.max_drawdown_pct) }}</td>
+              <td class="mono">{{ pct(row.hit_rate_pct, 0) }}</td>
+              <td class="mono">{{ pct(row.exposure_pct, 0) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="preset-ranking-foot">
+        <button type="button" class="btn ghost" :disabled="rankBusy" @click="runRanking">
+          {{ rankBusy ? '全量回测中…' : '立即重跑' }}
+        </button>
+        <span v-if="rankNote" class="sub-meta">{{ rankNote }}</span>
+      </div>
+    </details>
 
     <div v-if="error" class="error-bar" style="margin-top: 10px">{{ error }}</div>
 

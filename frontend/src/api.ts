@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AgentRunSummary,
   BacktestMeta,
   BacktestRequest,
@@ -16,6 +16,8 @@ import type {
   Meta,
   OpsFingerprint,
   OpsHealth,
+  PresetBatch,
+  PresetPayload,
   OpsRepair,
   OpsKind,
   OpsLedger,
@@ -120,6 +122,12 @@ export const api = {
     request<{ count: number; fields: ScreenField[] }>('/screener/fields'),
   screenerMeta: () =>
     request<{ as_of: string; symbols: number; cached: boolean }>('/screener/meta'),
+  screenerPresets: () => request<PresetPayload>('/backtest/presets'),
+  presetsRun: (rebalance = 20, topN = 10) =>
+    request<PresetBatch>(`/backtest/presets/run?rebalance=${rebalance}&top_n=${topN}`, {
+      method: 'POST',
+      body: '{}',
+    }),
   screenerAsk: (text: string, limit = 30) =>
     request<ScreenResult>('/screener/ask', {
       method: 'POST',

@@ -53,8 +53,13 @@ const items = computed<NavItem[]>(() => [
   },
   {
     key: 'strategy',
-    label: '策略',
+    label: '策略回测',
     icon: ['M4 5h16', 'M7 10h10', 'M10 15h4', 'M4 20l5-3 4 2 6-4'],
+  },
+  {
+    key: 'paper',
+    label: '模拟持仓',
+    icon: ['M4 7h16v10H4z', 'M8 12h8', 'M12 8v8'],
   },
   {
     key: 'factor',

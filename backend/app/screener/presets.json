@@ -1,0 +1,173 @@
+{
+  "_comment": "预设策略：text 是给人看的原话，query 是可直接执行的等价条件（无需再调模型）。每周全量回测按这里的顺序跑，排名写入 preset_batches。",
+  "presets": [
+    {
+      "id": "low-valuation",
+      "label": "低估值蓝筹",
+      "text": "市盈率低于15、ROE大于15%、市值超过500亿",
+      "query": {
+        "title": "低估值蓝筹",
+        "filters": [
+          {"field": "pe_ttm", "op": "<=", "value": 15},
+          {"field": "roe", "op": ">=", "value": 15},
+          {"field": "total_mv", "op": ">=", "value": 50000000000}
+        ],
+        "sort": [{"field": "roe", "desc": true}]
+      }
+    },
+    {
+      "id": "growth",
+      "label": "高成长",
+      "text": "营收增速大于25%、净利润增速大于25%、市盈率低于60",
+      "query": {
+        "title": "高成长",
+        "filters": [
+          {"field": "revenue_yoy", "op": ">=", "value": 25},
+          {"field": "profit_yoy", "op": ">=", "value": 25},
+          {"field": "pe_ttm", "op": "<=", "value": 60}
+        ],
+        "sort": [{"field": "profit_yoy", "desc": true}]
+      }
+    },
+    {
+      "id": "high-dividend",
+      "label": "高股息防御",
+      "text": "股息率超过4%、市盈率低于20、资产负债率低于60",
+      "query": {
+        "title": "高股息防御",
+        "filters": [
+          {"field": "dv_ttm", "op": ">=", "value": 4},
+          {"field": "pe_ttm", "op": "<=", "value": 20},
+          {"field": "debt_ratio", "op": "<=", "value": 60}
+        ],
+        "sort": [{"field": "dv_ttm", "desc": true}]
+      }
+    },
+    {
+      "id": "oversold",
+      "label": "超跌反弹",
+      "text": "股价回撤超过40%、ROE大于8%、换手率大于2",
+      "query": {
+        "title": "超跌反弹",
+        "filters": [
+          {"field": "drawdown_52w", "op": "<=", "value": -40},
+          {"field": "roe", "op": ">=", "value": 8},
+          {"field": "turnover_rate", "op": ">=", "value": 2}
+        ],
+        "sort": [{"field": "drawdown_52w", "desc": false}]
+      }
+    },
+    {
+      "id": "price-volume",
+      "label": "量价齐升",
+      "text": "量比大于1.5、近20日涨幅大于10%、成交额大于5亿",
+      "query": {
+        "title": "量价齐升",
+        "filters": [
+          {"field": "volume_ratio", "op": ">=", "value": 1.5},
+          {"field": "ret20", "op": ">=", "value": 10},
+          {"field": "amount", "op": ">=", "value": 500000000}
+        ],
+        "sort": [{"field": "ret20", "desc": true}]
+      }
+    },
+    {
+      "id": "volume-breakout",
+      "label": "放量突破",
+      "text": "近5日涨幅大于8%、量能波动20日大于0.3、成交额大于3亿",
+      "query": {
+        "title": "放量突破",
+        "filters": [
+          {"field": "ret5", "op": ">=", "value": 8},
+          {"field": "a_vstd_20", "op": ">=", "value": 0.3},
+          {"field": "amount", "op": ">=", "value": 300000000}
+        ],
+        "sort": [{"field": "ret5", "desc": true}]
+      }
+    },
+    {
+      "id": "low-volatility",
+      "label": "低波动",
+      "text": "量能波动20日小于0.3、市盈率低于30、成交额大于1亿",
+      "query": {
+        "title": "低波动",
+        "filters": [
+          {"field": "a_vstd_20", "op": "<=", "value": 0.3},
+          {"field": "pe_ttm", "op": "<=", "value": 30},
+          {"field": "amount", "op": ">=", "value": 100000000}
+        ],
+        "sort": [{"field": "a_vstd_20", "desc": false}]
+      }
+    },
+    {
+      "id": "earnings-surprise",
+      "label": "业绩预增",
+      "text": "净利润增速大于50%、营收增速大于20%、市盈率低于50",
+      "query": {
+        "title": "业绩预增",
+        "filters": [
+          {"field": "profit_yoy", "op": ">=", "value": 50},
+          {"field": "revenue_yoy", "op": ">=", "value": 20},
+          {"field": "pe_ttm", "op": "<=", "value": 50}
+        ],
+        "sort": [{"field": "profit_yoy", "desc": true}]
+      }
+    },
+    {
+      "id": "below-book",
+      "label": "破净修复",
+      "text": "市净率低于1、ROE大于5、资产负债率低于70",
+      "query": {
+        "title": "破净修复",
+        "filters": [
+          {"field": "pb", "op": "<=", "value": 1},
+          {"field": "roe", "op": ">=", "value": 5},
+          {"field": "debt_ratio", "op": "<=", "value": 70}
+        ],
+        "sort": [{"field": "pb", "desc": false}]
+      }
+    },
+    {
+      "id": "main-inflow",
+      "label": "主力流入",
+      "text": "近20日主力净流入超过3亿、换手率大于2、市盈率低于40",
+      "query": {
+        "title": "主力流入",
+        "filters": [
+          {"field": "mf_net_20d", "op": ">=", "value": 30000},
+          {"field": "turnover_rate", "op": ">=", "value": 2},
+          {"field": "pe_ttm", "op": "<=", "value": 40}
+        ],
+        "sort": [{"field": "mf_net_20d", "desc": true}]
+      }
+    },
+    {
+      "id": "post-announcement",
+      "label": "公告后强势",
+      "text": "公告后漂移大于5、市盈率低于40、成交额大于1亿",
+      "query": {
+        "title": "公告后强势",
+        "filters": [
+          {"field": "fd_pead", "op": ">=", "value": 5},
+          {"field": "pe_ttm", "op": "<=", "value": 40},
+          {"field": "amount", "op": ">=", "value": 100000000}
+        ],
+        "sort": [{"field": "fd_pead", "desc": true}]
+      }
+    },
+    {
+      "id": "limit-up-pullback",
+      "label": "涨停回踩",
+      "text": "近5日涨停、换手率大于5、市盈率低于60",
+      "query": {
+        "title": "涨停回踩",
+        "filters": [
+          {"field": "limit_up_5d", "op": ">=", "value": 1},
+          {"field": "turnover_rate", "op": ">=", "value": 5},
+          {"field": "pe_ttm", "op": "<=", "value": 60}
+        ],
+        "sort": [{"field": "limit_up_5d", "desc": true}]
+      }
+    }
+  ]
+}

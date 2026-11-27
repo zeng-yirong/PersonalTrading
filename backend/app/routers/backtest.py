@@ -1,4 +1,4 @@
-﻿"""Backtest endpoints: run a screener query over history, keep the runs.
+"""Backtest endpoints: run a screener query over history, keep the runs.
 
 The request reuses the screener's query model on purpose: whatever the screener
 accepts, the backtest accepts, and the field whitelist is validated in one place.
@@ -69,6 +69,26 @@ async def run_detail(run_id: int) -> dict[str, Any]:
     if result is None:
         raise HTTPException(status_code=404, detail=f"回测 {run_id} 不存在")
     return result
+
+
+@router.get("/presets")
+async def presets() -> dict[str, Any]:
+    """预设清单 + 最近一批全量回测排名。"""
+    from app.screener import ranking
+
+    return await run_in_threadpool(ranking.describe)
+
+
+@router.post("/presets/run")
+async def presets_run(
+    rebalance: int = Query(20, ge=1, le=250), top_n: int = Query(10, ge=1, le=50)
+) -> dict[str, Any]:
+    """手动触发一次全量回测（约 30–90 秒；每周定时任务跑的是同一个函数）。"""
+    from app.screener import ranking
+
+    return await run_in_threadpool(
+        lambda: ranking.run_all(rebalance=rebalance, top_n=top_n, persist=True)
+    )
 
 
 @router.post("/runs/{run_id}/commentary")
