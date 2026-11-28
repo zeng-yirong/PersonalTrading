@@ -273,6 +273,26 @@ def test_render_labels_caps_and_keeps_conflicts(app_db):
     assert "【经验（不是事实）】" in capped
 
 
+def test_demo_seed_and_clear(app_db):
+    first = experience.seed_demo()
+    assert len(first) == 4
+    assert {item["status"] for item in first} == {"candidate", "active"}
+    assert len(experience.list_experiences()) == 4
+
+    features = experience.features_from_context(_context("2026-11-27", index_20d=2.0))
+    active = experience.recall(features, as_of="2026-11-27")
+    assert len(active) == 2
+    assert all(item["status"] == "active" for item in active)
+
+    again = experience.seed_demo()
+    assert len(again) == 4
+    assert len(experience.list_experiences()) == 4
+
+    assert experience.clear_demo() == 4
+    assert experience.list_experiences() == []
+    assert experience.recall(features, as_of="2026-11-27") == []
+
+
 def test_shadow_precision_and_graduation(app_db):
     with connection() as conn:
         for run_id, day in ((1, "2026-11-20"), (2, "2026-11-21"), (3, "2026-11-22")):

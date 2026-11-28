@@ -50,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     graduate.add_argument("--reason", required=True)
 
     sub.add_parser("evaluation", help="影子召回精确率")
+    demo = sub.add_parser("demo", help="写入 / 清除演示经验卡")
+    demo.add_argument("--clear", action="store_true")
     paired = sub.add_parser("paired", help="experience on/off 配对（花钱）")
     paired.add_argument("--live", action="store_true")
     paired.add_argument("--limit", type=int, default=30)
@@ -105,6 +107,18 @@ def main(argv: list[str] | None = None) -> int:
             "shadow": experience.evaluation(),
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "demo":
+        if args.clear:
+            print(f"已清除 {experience.clear_demo()} 张演示卡及其召回记录")
+            return 0
+        items = experience.seed_demo()
+        for item in items:
+            print(
+                f"#{item['id']} {item['status']:<9} {item['scope']}/{item['scope_key']}"
+                f"｜{item['lesson']}"
+            )
+        print("打开「运维 → 经验」即可看到；测试后执行 `python scripts/experience.py demo --clear`。")
         return 0
     if args.command == "paired":
         gate = experience.preflight()

@@ -689,6 +689,135 @@ def recalls(limit: int = 50, run_id: Optional[int] = None) -> list[dict[str, Any
         return [dict(row) for row in conn.execute(sql, params).fetchall()]
 
 
+_DEMO_EVIDENCE = [
+    {
+        "kind": "demo",
+        "ref_id": -1,
+        "symbol": "DEMO",
+        "date": "2026-11-20",
+        "metric": -5.0,
+        "excess": -3.0,
+        "outcome": "看多/错误",
+    },
+    {
+        "kind": "demo",
+        "ref_id": -2,
+        "symbol": "DEMO",
+        "date": "2026-11-21",
+        "metric": -3.0,
+        "excess": -2.0,
+        "outcome": "看多/错误",
+    },
+    {
+        "kind": "demo",
+        "ref_id": -3,
+        "symbol": "DEMO",
+        "date": "2026-11-22",
+        "metric": -6.0,
+        "excess": -4.0,
+        "outcome": "看多/错误",
+    },
+]
+
+_DEMO_CARDS = (
+    {
+        "key": "weak_tape",
+        "scope": "market",
+        "scope_key": "weak_tape",
+        "status": "candidate",
+        "trigger": {"index_20d_lte": -3},
+        "lesson": "【演示】沪深300 20 日跌幅达到 3% 以上时，逆势批准正仓位的事后错误率偏高；仓位应降一档",
+        "action": {"position_multiplier": 0.6},
+    },
+    {
+        "key": "chase_overbought",
+        "scope": "decision",
+        "scope_key": "chase_overbought",
+        "status": "candidate",
+        "trigger": {"rsi14_gte": 65, "close_vs_ma20_gte": 3},
+        "lesson": "【演示】RSI14 ≥65 且偏离 MA20 ≥3% 时追多，20 日事后错误率偏高；等回踩再建仓",
+        "action": {"entry": "wait_pullback"},
+    },
+    {
+        "key": "market_mild",
+        "scope": "market",
+        "scope_key": "mild_expansion",
+        "status": "active",
+        "trigger": {"index_20d_lte": 3},
+        "lesson": "【演示】沪深300 20 日涨幅不足 3% 时，单股仓位上限压到 50%；本卡仅用于验证注入，测试后请退役",
+        "action": {"position_multiplier": 0.5},
+    },
+    {
+        "key": "baijiu_leader",
+        "scope": "industry",
+        "scope_key": "白酒",
+        "status": "active",
+        "trigger": {"index_20d_lte": 5},
+        "lesson": "【演示】白酒在弱扩张期优先选现金流为正的龙头；本卡仅用于验证行业召回，测试后请退役",
+        "action": {"sector": "prefer_leader"},
+    },
+)
+
+
+def seed_demo() -> list[dict[str, Any]]:
+    """Insert clearly-labelled demo cards; removable with ``clear_demo``.
+
+    Evidence uses ``kind=demo`` and negative ref ids, so it never pretends to be
+    a real review. Two cards are active on purpose: that is the only way to see
+    the decision-layer block without waiting for T+20.
+    """
+    ensure_schema()
+    created: list[dict[str, Any]] = []
+    with connection() as conn:
+        for card in _DEMO_CARDS:
+            fingerprint = f"demo:{card['scope']}:{card['key']}"
+            evidence = json.dumps(_DEMO_EVIDENCE, ensure_ascii=False)
+            conn.execute(
+                "INSERT INTO experiences(fingerprint, scope, scope_key, source, trigger_json, "
+                "lesson, action_json, evidence_json, confidence, status, as_of, created_at, "
+                "updated_at, version) VALUES(?, ?, ?, 'demo', ?, ?, ?, ?, 70, ?, '2026-11-27', "
+                "?, ?, 1) "
+                "ON CONFLICT(fingerprint) DO UPDATE SET status=excluded.status, "
+                "trigger_json=excluded.trigger_json, lesson=excluded.lesson, "
+                "action_json=excluded.action_json, evidence_json=excluded.evidence_json, "
+                "confidence=excluded.confidence, as_of=excluded.as_of, "
+                "updated_at=excluded.updated_at, version=version + 1",
+                (
+                    fingerprint,
+                    card["scope"],
+                    card["scope_key"],
+                    json.dumps(card["trigger"], ensure_ascii=False),
+                    card["lesson"],
+                    json.dumps(card["action"], ensure_ascii=False),
+                    evidence,
+                    card["status"],
+                    now_iso(),
+                    now_iso(),
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM experiences WHERE fingerprint = ?", (fingerprint,)
+            ).fetchone()
+            created.append(_item(row))
+    return created
+
+
+def clear_demo() -> int:
+    ensure_schema()
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT id FROM experiences WHERE source = 'demo'"
+        ).fetchall()
+        ids = [int(row["id"]) for row in rows]
+        if ids:
+            marks = ",".join("?" for _ in ids)
+            conn.execute(
+                f"DELETE FROM experience_recalls WHERE experience_id IN ({marks})", ids
+            )
+            conn.execute(f"DELETE FROM experiences WHERE id IN ({marks})", ids)
+    return len(ids)
+
+
 def stats() -> dict[str, Any]:
     ensure_schema()
     with connection() as conn:

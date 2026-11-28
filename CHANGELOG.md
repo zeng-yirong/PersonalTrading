@@ -1,9 +1,10 @@
-﻿# CHANGELOG
+# CHANGELOG
 
 按阶段记录，不按文件。每条都能对应到 `git log` 里的一次提交。
 
 ## 未发布（v0.10.1）
 
+- 经验记忆演示工具：`python scripts/experience.py demo` 写入 4 张带「【演示】」标记的经验卡（2 候选 + 2 生效，证据标记 `kind=demo`，不伪装成真实复盘），`demo --clear` 清除；用于在真实 UI 上验证注入与状态操作
 - 经验记忆 P8-3：影子召回精确率 / 覆盖率报表；`paired` 固定 3.1 记忆、只切 active 经验做 on/off 配对（门槛 ≥30 判定 + ≥30 可配对 + ≥1 active）；`graduate()` 固化到 skill / guard / manual 后退役；Ops 显示精确率并可固化
 - 经验记忆 P8-2：active 经验卡注入交易员 / 风控负责人（≤300 字符，独立于 3.1 历史结论），报告头显示「经验 N 条」，`context.experience_ids` 可审计；candidate / retired 不注入，冲突卡同时展示
 - 经验记忆 P8-1：证据门槛 ≥3 + 人工确认/退役（reason 必填）；状态机白名单（candidate/active/retired）；Ops「经验」tab 可看证据并操作；candidate / retired 都不进召回
