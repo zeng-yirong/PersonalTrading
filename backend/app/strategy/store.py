@@ -1,4 +1,4 @@
-﻿"""策略库：实体、状态机、以及"最近一批成绩"的读取。
+"""策略库：实体、状态机、以及"最近一批成绩"的读取。
 
 策略以前只是 `presets.json` 里的常量——不能新增、不能下架、不能留档。这里把它变成
 一张表，并把"每周跑一次"的结果写进 `strategy_runs`（1 年 / 2 年两个窗口各一行）。
@@ -19,7 +19,7 @@ from app.screener.presets import PRESETS
 
 STATUSES = ("template", "candidate", "watch", "champion", "retired", "paused")
 UP = {"template": "candidate", "candidate": "watch", "watch": "champion", "retired": "watch"}
-DOWN = {"champion": "watch", "watch": "candidate", "candidate": "template"}
+DOWN = {"champion": "watch", "watch": "candidate", "candidate": "template", "retired": "candidate"}
 
 # 模板的出身写死在一处：这批条件来自 2026-11-24 选股器 UI 的手写示例，
 # 2026-11-27 手工转成结构化条件，**没有做过参数搜索、样本外检验或分组测试**。

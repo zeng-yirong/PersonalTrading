@@ -44,37 +44,42 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reason", default="", help="淘汰理由（必填，会留档）")
     parser.add_argument("--force", action="store_true", help="允许淘汰 watch / champion")
     parser.add_argument("--dry-run", action="store_true", help="只看会动谁")
+    parser.add_argument("--restore", action="store_true", help="把淘汰的恢复为候选（默认扫 retired）")
     args = parser.parse_args(argv)
 
     if not args.reason.strip() and not args.dry_run:
         raise SystemExit("必须给 --reason：淘汰理由会留在库里，半年后靠它才知道为什么下架")
 
     init_db()
+    if args.restore and args.status == "candidate":
+        args.status = "retired"          # 恢复时默认从淘汰池里挑
     rows = select(args.horizon, args.status, args.ids)
     if not rows:
         print("没有匹配的策略")
         return 0
 
+    target = "candidate" if args.restore else "retired"
+    action = "恢复" if args.restore else "淘汰"
     print(f"匹配 {len(rows)} 条：")
     retired = 0
     for row in rows:
         label = f"{row['id']}（{row['name']}，{row['horizon']}，{row['status']}）"
-        if row["status"] in {"watch", "champion"} and not args.force:
+        if not args.restore and row["status"] in {"watch", "champion"} and not args.force:
             print(f"  跳过 {label}：观察中/正式策略，先降级或加 --force")
             continue
         if args.dry_run:
-            print(f"  将淘汰 {label}")
+            print(f"  将{action} {label}")
             continue
         try:
-            store.set_status(row["id"], "retired", args.reason)
+            store.set_status(row["id"], target, args.reason)
         except store.StrategyError as exc:
             print(f"  失败 {label}：{exc}")
             continue
-        print(f"  已淘汰 {label}")
+        print(f"  已{action} {label}")
         retired += 1
 
     if not args.dry_run:
-        print(f"共淘汰 {retired} 条")
+        print(f"共{action} {retired} 条")
     return 0
 
 

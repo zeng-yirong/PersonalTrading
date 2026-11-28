@@ -1,4 +1,4 @@
-"""来源 A（人工假设）批量录入：50 条手写策略假设。
+﻿"""来源 A（人工假设）批量录入：50 条手写策略假设。
 
 每条都写清三件事：**假设**（为什么现在有效）、**条件**（可执行的 ScreenQuery）、
 **失效条件**（什么情况下停用）。没有失效条件的假设不是策略，只是一句感想。
@@ -492,6 +492,135 @@ BATCH: list[dict[str, Any]] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# 技术指标批次（KDJ / BOLL / MACD / CCI / RSI / 均线组合）。
+# 单日快照里没有"金叉"这种跨日事件，只能用"双线同处低位 + 当日转强"近似——
+# 这一点必须写在假设里，否则回测出来的不是金叉。
+# ---------------------------------------------------------------------------
+
+TECH_BATCH: list[dict[str, Any]] = [
+    {
+        "id": "t01-kdj-oversold",
+        "name": "KDJ 超卖",
+        "horizon": "short",
+        "hypothesis": "J 值≤0、K≤25 是短期极度超卖，反抽概率高于继续下跌（金叉需跨日，这里用低位近似）。",
+        "invalidation": "组合次日平均收益转负，或 J 值分布长期贴地（指标钝化）时停用。",
+        "filters": [("kdj_j", "<=", 0), ("kdj_k", "<=", 25), ("amount", ">=", 50_000_000)],
+        "sort": ("kdj_j", False),
+    },
+    {
+        "id": "t02-kdj-turn-up",
+        "name": "KDJ 低位转强",
+        "horizon": "mid",
+        "hypothesis": "K、D 都在 35 以下但 5 日已涨≥2%，是低位刚拐头的形态，中线反弹更稳。",
+        "invalidation": "组合 K 值中位数持续低于 20（没有拐头）时停用。",
+        "filters": [("kdj_k", "<=", 35), ("kdj_d", "<=", 35), ("ret5", ">=", 2)],
+        "sort": ("ret5", True),
+    },
+    {
+        "id": "t03-kdj-strong",
+        "name": "KDJ 强势钝化",
+        "horizon": "mid",
+        "hypothesis": "K、D 都在 80 以上的钝化说明趋势极强，强势股的回调通常浅。",
+        "invalidation": "组合 K 值中位数跌破 50 时停用。",
+        "filters": [("kdj_k", ">=", 80), ("kdj_d", ">=", 80), ("ret20", ">=", 10)],
+        "sort": ("kdj_k", True),
+    },
+    {
+        "id": "t04-boll-lower",
+        "name": "BOLL 下轨",
+        "horizon": "short",
+        "hypothesis": "价格贴布林下轨（boll_pos≤0.15）叠加 RSI≤35，是均值回归的高胜率区。",
+        "invalidation": "组合 5 日平均收益转负（下轨支撑失效）时停用。",
+        "filters": [("boll_pos", "<=", 0.15), ("rsi12", "<=", 35), ("amount", ">=", 50_000_000)],
+        "sort": ("boll_pos", False),
+    },
+    {
+        "id": "t05-boll-breakout",
+        "name": "BOLL 上轨突破",
+        "horizon": "mid",
+        "hypothesis": "突破上轨（boll_pos≥0.95）且量比≥1.5，开口向上时突破更容易延续。",
+        "invalidation": "组合突破后 5 日跌回中轨的比例过半时停用。",
+        "filters": [("boll_pos", ">=", 0.95), ("volume_ratio", ">=", 1.5), ("amount", ">=", 100_000_000)],
+        "sort": ("volume_ratio", True),
+    },
+    {
+        "id": "t06-boll-mid-pullback",
+        "name": "BOLL 中轨回踩",
+        "horizon": "mid",
+        "hypothesis": "回落中轨附近（0.35–0.55）但仍在 MA20 上方、20 日仍涨 5%，属于强势整理。",
+        "invalidation": "组合跌破 MA20 的比例过半时停用。",
+        "filters": [("boll_pos", ">=", 0.35), ("boll_pos", "<=", 0.55), ("gap_ma20", ">=", 0), ("ret20", ">=", 5)],
+        "sort": ("ret20", True),
+    },
+    {
+        "id": "t07-boll-squeeze",
+        "name": "布林收口",
+        "horizon": "long",
+        "hypothesis": "价格在中轨附近且量能波动≤0.3，是波动收敛形态，长线持有的回撤天然更小。",
+        "invalidation": "组合年化波动升到 30% 以上时停用。",
+        "filters": [("boll_pos", ">=", 0.4), ("boll_pos", "<=", 0.6), ("a_vstd_20", "<=", 0.3), ("amount", ">=", 50_000_000)],
+        "sort": ("a_vstd_20", False),
+    },
+    {
+        "id": "t08-macd-expand",
+        "name": "MACD 柱放大",
+        "horizon": "mid",
+        "hypothesis": "MACD 柱≥0.3 且 5 日涨≥3%、量比≥1.2，动能与成交量同时扩张。",
+        "invalidation": "组合 MACD 柱中位数转负时停用。",
+        "filters": [("macd_hist", ">=", 0.3), ("ret5", ">=", 3), ("volume_ratio", ">=", 1.2)],
+        "sort": ("macd_hist", True),
+    },
+    {
+        "id": "t09-macd-flip",
+        "name": "MACD 零轴翻红",
+        "horizon": "mid",
+        "hypothesis": "MACD 柱刚由负转正（0–0.1 之间）且 5 日不跌，是趋势切换的第一段。",
+        "invalidation": "组合 10 日内 MACD 柱重新转负的比例过半时停用。",
+        "filters": [("macd_hist", ">=", 0), ("macd_hist", "<=", 0.1), ("ret5", ">=", 0)],
+        "sort": ("macd_hist", True),
+    },
+    {
+        "id": "t10-cci-oversold",
+        "name": "CCI 超卖",
+        "horizon": "mid",
+        "hypothesis": "CCI≤-100 且 5 日跌≥3%，但 ROE≥5%，属于情绪超卖而非基本面恶化。",
+        "invalidation": "组合 ROE 中位数跌破 3% 时停用。",
+        "filters": [("cci", "<=", -100), ("ret5", "<=", -3), ("roe", ">=", 5)],
+        "sort": ("cci", False),
+    },
+    {
+        "id": "t11-cci-breakout",
+        "name": "CCI 突破",
+        "horizon": "mid",
+        "hypothesis": "CCI≥100 且量比≥1.5，突破 100 往往对应趋势启动。",
+        "invalidation": "组合 5 日平均收益转负时停用。",
+        "filters": [("cci", ">=", 100), ("volume_ratio", ">=", 1.5), ("amount", ">=", 100_000_000)],
+        "sort": ("cci", True),
+    },
+    {
+        "id": "t12-rsi-strong",
+        "name": "RSI 强势区",
+        "horizon": "mid",
+        "hypothesis": "RSI12 在 55–70 之间且 20 日涨≥8%，是「强但没过热」的甜区。",
+        "invalidation": "组合 RSI 中位数跌破 45 时停用。",
+        "filters": [("rsi12", ">=", 55), ("rsi12", "<=", 70), ("ret20", ">=", 8)],
+        "sort": ("ret20", True),
+    },
+    {
+        "id": "t13-triple-resonance",
+        "name": "三线共振",
+        "horizon": "mid",
+        "hypothesis": "站上 MA20、MA60 上方 5%、MACD 柱为正、RSI≥50——四个条件同时满足时趋势最确定。",
+        "invalidation": "组合同时满足四项的比例跌破 20%（条件过严、样本太少）时停用。",
+        "filters": [("gap_ma20", ">=", 0), ("gap_ma60", ">=", 5), ("macd_hist", ">=", 0), ("rsi12", ">=", 50)],
+        "sort": ("gap_ma60", True),
+    },
+]
+
+BATCHES = {"manual": BATCH, "tech": TECH_BATCH}
+
+
 def build_query(item: dict[str, Any]) -> dict[str, Any]:
     field, desc = item["sort"]
     return {
@@ -638,7 +767,7 @@ def recheck() -> int:
         rows = conn.execute(
             "SELECT s.id, s.name, s.horizon, s.status, r.id AS run_id, r.metrics_json "
             "FROM strategies s JOIN strategy_runs r ON r.strategy_id = s.id "
-            "WHERE r.window = '1y' AND s.id LIKE 'a%' ORDER BY r.id DESC"
+            "WHERE r.window = '1y' AND (s.id LIKE 'a%' OR s.id LIKE 't%') ORDER BY r.id DESC"
         ).fetchall()
     seen: set[str] = set()
     for row in rows:
@@ -669,13 +798,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--two-years", type=int, default=0, help="给前 N 名补两年窗口")
     parser.add_argument("--promote", action="store_true", help="过门槛的转 watch")
     parser.add_argument("--recheck", action="store_true", help="不重跑回测，只按当前门槛重算")
+    parser.add_argument("--batch", default="manual", choices=sorted(BATCHES), help="manual（A 批次）或 tech（技术指标批次）")
     args = parser.parse_args(argv)
 
     init_db()
     if args.recheck:
         print(f"复核后转观察：{recheck()} 条")
         return 0
-    items = BATCH
+    items = BATCHES[args.batch]
     validate(items)
     written = insert(items)
     print(f"入库 {written} 条（已存在跳过 {len(items) - written} 条）")

@@ -169,3 +169,10 @@ def test_create_requires_invalidation_via_api(app_db):
     assert created["status"] == "candidate"
     assert created["invalidation"].startswith("沪深300")
     assert created["horizon"] == "long"
+
+def test_retired_can_be_restored_to_candidate(app_db):
+    """淘汰是可逆的：恢复回候选，而不是直接回观察（避免绕过门槛）。"""
+    store.set_status("low-valuation", "retired", "测试淘汰")
+    restored = store.set_status("low-valuation", "candidate", "回退：参数分类有误")
+    assert restored["status"] == "candidate"
+    assert restored["retire_reason"] == "测试淘汰"     # 历史留在库里
