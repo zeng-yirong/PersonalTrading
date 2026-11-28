@@ -6,6 +6,7 @@ local install has no database server dependency.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -341,6 +342,7 @@ def _migrate(conn) -> None:
         ("backtest_runs", "source_run_id", "INTEGER"),
         ("topic_reports", "source_run_id", "INTEGER"),
         ("agent_runs", "skill_version", "TEXT"),
+        ("agent_runs", "as_of", "TEXT"),
         ("paper_positions", "entry_adj", "REAL"),
         ("strategies", "horizon", "TEXT DEFAULT 'long'"),
         ("strategies", "provenance_json", "TEXT"),
@@ -354,6 +356,24 @@ def _migrate(conn) -> None:
         existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+    _backfill_run_as_of(conn)
+
+
+def _backfill_run_as_of(conn) -> None:
+    """Old runs predate ``agent_runs.as_of``; recover it from the stored context."""
+    rows = conn.execute(
+        "SELECT id, context_json FROM agent_runs WHERE as_of IS NULL"
+    ).fetchall()
+    for row in rows:
+        try:
+            ctx = json.loads(row["context_json"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        value = ctx.get("as_of") if isinstance(ctx, dict) else None
+        if value:
+            conn.execute(
+                "UPDATE agent_runs SET as_of=? WHERE id=?", (str(value)[:10], row["id"])
+            )
 
 
 def now_iso() -> str:

@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from app.agents.llm import ChatClient, LLMError
+from app.agents import memory as agent_memory
 from app.data import store as market_store
 from app.market import overview as market_overview
 from app.market import sentiment as sentiment_series
@@ -53,6 +54,10 @@ async def research(
     snapshot = context.build(text)
     payload = json.dumps(_slim(snapshot), ensure_ascii=False, separators=(",", ":"))
     user = prompts.build_user(text, payload, snapshot.get("data_gaps") or [])
+    recalled = agent_memory.for_topic(text, as_of=snapshot.get("as_of"), limit=2)
+    memory_block = agent_memory.render_topics(recalled)
+    if memory_block:
+        user = f"{user}\n\n{memory_block}"
     reply = await client.complete_json(
         prompts.SYSTEM + skills.prompt_suffix("topic"), user, max_tokens=4096, temperature=0.2
     )
@@ -75,6 +80,7 @@ async def research(
                 + "），这次没有保存。可以重试，或把主题问得更具体。"
             )
     report = _normalise(reply)
+    report["memory_ids"] = agent_memory.memory_ids(recalled)
 
     report["data_gaps"] = _merge_gaps(report.get("data_gaps") or [], snapshot)
     usage = client.usage.as_dict()

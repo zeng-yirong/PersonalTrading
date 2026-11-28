@@ -80,6 +80,7 @@ class ChatClient:
     api_key: str = ""
     base_url: str = ""
     timeout: float = 0.0
+    temperature: Optional[float] = None   # replay sets 0.0; normal runs use settings
     usage: Usage = field(default_factory=Usage)
 
     def __post_init__(self) -> None:
@@ -113,7 +114,11 @@ class ChatClient:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "temperature": settings.agent_temperature if temperature is None else temperature,
+            "temperature": (
+                (self.temperature if self.temperature is not None else settings.agent_temperature)
+                if temperature is None
+                else temperature
+            ),
             "max_tokens": max_tokens or settings.agent_max_tokens,
             "stream": False,
         }

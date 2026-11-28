@@ -16,6 +16,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
+from app.config import settings
 from app.data import store
 from app.services.indicators import compute_all
 from app.services.symbols import normalize_code
@@ -113,6 +114,23 @@ def build_context(symbol: str, *, bars: int = 250) -> dict[str, Any]:
         memory.sync()          # 把新完成的结论补进检索索引
     except Exception:  # noqa: BLE001 - 记忆失败不该挡住推演
         pass
+    as_of_text = _iso(end)
+    memory_items = memory.for_symbol(
+        code,
+        as_of=as_of_text,
+        limit=3,
+        window_days=settings.memory_window_days,
+    )
+    if settings.memory_peer_enabled and profile.get("industry"):
+        try:
+            memory_items += memory.for_industry(
+                profile["industry"],
+                as_of=as_of_text,
+                exclude_symbol=code,
+                limit=settings.memory_peer_limit,
+            )
+        except Exception:  # noqa: BLE001 - 面板/行业缺失时不影响主记忆
+            pass
 
     return {
         "symbol": code,
@@ -128,7 +146,8 @@ def build_context(symbol: str, *, bars: int = 250) -> dict[str, Any]:
         "sector": context_market.build_sector(profile["industry"], code),
         "events": context_events.build_events(ts_code),
         "attention": context_events.build_attention(ts_code, code),
-        "memory": memory.for_symbol(code, limit=3),
+        "memory": memory_items,
+        "memory_ids": memory.memory_ids(memory_items),
         "as_of": _iso(end),
     }
 

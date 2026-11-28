@@ -13,6 +13,8 @@ import type {
   Fundamentals,
   IntradayData,
   MarketOverview,
+  MemoryItem,
+  MemoryStats,
   Meta,
   OpsFingerprint,
   OpsHealth,
@@ -51,7 +53,6 @@ import type {
   WatchlistItem,
   WatchlistMetric,
 } from './types'
-
 const BASE = '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -231,6 +232,16 @@ export const api = {
     }),
   opsUsage: (days = 14) => request<OpsUsage>(`/usage?days=${days}`),
   opsHealth: () => request<OpsHealth>('/data/health'),
+  memory: (params: { symbol?: string; q?: string; asOf?: string; limit?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.symbol) query.set('symbol', params.symbol)
+    if (params.q) query.set('q', params.q)
+    if (params.asOf) query.set('as_of', params.asOf)
+    if (params.limit) query.set('limit', String(params.limit))
+    return request<MemoryItem[]>(`/memory?${query.toString()}`)
+  },
+  memoryStats: () => request<MemoryStats>('/memory/stats'),
+  memoryRebuild: () => request<{ indexed: number }>('/memory/rebuild', { method: 'POST' }),
   opsRepair: (dataset: string, days = 5) =>
     request<OpsRepair>(
       `/data/repair?dataset=${encodeURIComponent(dataset)}&days=${days}`,

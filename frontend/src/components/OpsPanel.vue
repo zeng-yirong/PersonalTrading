@@ -2,6 +2,7 @@
 import * as echarts from 'echarts'
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
+import MemoryPanel from './MemoryPanel.vue'
 import type {
   OpsChain,
   OpsEntry,
@@ -16,7 +17,7 @@ import type {
   OpsUsagePoint,
 } from '../types'
 
-type OpsTab = 'ledger' | 'cost' | 'health'
+type OpsTab = 'ledger' | 'cost' | 'health' | 'memory'
 
 interface UsageTipParam {
   dataIndex?: number
@@ -34,6 +35,7 @@ const TAB_ITEMS: Array<{ label: string; value: OpsTab }> = [
   { label: '账本', value: 'ledger' },
   { label: '成本', value: 'cost' },
   { label: '数据健康', value: 'health' },
+  { label: '记忆', value: 'memory' },
 ]
 
 const KIND_CLASS: Record<OpsKind, string> = {
@@ -797,6 +799,10 @@ onActivated(() => {
         </div>
 
         <div v-if="!health" class="loading" style="margin-top: 12px">暂无数据健康信息。</div>
+      </div>
+
+      <div v-else-if="tab === 'memory'">
+        <MemoryPanel />
       </div>
     </template>
   </section>

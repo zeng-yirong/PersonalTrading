@@ -1920,6 +1920,29 @@ details.note summary {
   color: var(--accent-text);
 }
 
+.ops-memory-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.ops-memory-tools input {
+  flex: 1 1 220px;
+  min-width: 180px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.ops-memory-tools input[type='date'] {
+  flex: 0 0 auto;
+  min-width: 145px;
+}
+
 .ops-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

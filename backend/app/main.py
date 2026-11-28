@@ -17,6 +17,7 @@ from app.routers import (
     backtest,
     factors,
     market,
+    memory,
     meta,
     ops,
     paper,
@@ -74,6 +75,7 @@ app.include_router(factors.router)
 app.include_router(paper.router)
 app.include_router(strategy.router)
 app.include_router(ops.router)
+app.include_router(memory.router)
 
 
 @app.get("/")

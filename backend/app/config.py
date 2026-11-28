@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     agent_temperature: float = 0.25
     agent_timeout: float = 120.0
 
+    # Memory retrieval (goat 3.1): as-of bounded, with an explicit window.
+    memory_window_days: int = 180
+    memory_topic_window_days: int = 365
+    memory_block_chars: int = 900
+    memory_peer_enabled: bool = False
+    memory_peer_limit: int = 2
+
     http_timeout: float = 12.0
     quote_ttl: int = 5
     kline_ttl: int = 300

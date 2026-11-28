@@ -25,7 +25,7 @@ def create_run(
     with connection() as conn:
         cursor = conn.execute(
             "INSERT INTO agent_runs(symbol, name, status, model, rounds, started_at, "
-            "context_json, skill_version) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+            "as_of, context_json, skill_version) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 symbol,
                 name,
@@ -33,6 +33,7 @@ def create_run(
                 model,
                 rounds,
                 now_iso(),
+                str(context.get("as_of") or "")[:10] or None,
                 json.dumps(context, ensure_ascii=False, default=str),
                 skill_version or None,
             ),

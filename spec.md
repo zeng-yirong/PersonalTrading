@@ -7,7 +7,7 @@
 ## 通用约定
 
 - **能跑才算验收**：每条验收都是一个命令、一个端点或一条 pytest 用例，不接受"看起来对"。
-- **口径先于结论**：改复权、as-of、单位、百分比，必须同时改测试与 README 的口径段，并在验收里给出改前 / 改后数字。
+- **口径先于结论**：改复权、as-of、单位、百分比，必须同时改测试与 [DESIGN.md](DESIGN.md) 中对应功能的规则说明，并在验收里给出改前 / 改后数字。
 - **缺数据显式**：新增数据依赖时，验收必须包含"上游为空时报告里怎么写"。
 - **可复现**：涉及排序或并列值的查询，末尾固定 `symbol ASC`；同一输入连跑三次结果一致。
 - **门槛预注册**：因子 / 策略 / 技能的晋级门槛写成常量，改动单独提交并写明原因。
@@ -332,15 +332,23 @@
 
 **实现**
 
-- `agents/memory.py`：`memory_index` + `memory_fts`（FTS5 trigram，中文子串可搜），索引推演与主题结论（标题 / 裁定 / 置信 / 日期 / 复盘结果）。
-- 决策层注入：交易员与风控负责人 prompt 带同标的最近 3 条结论，每条带日期与复盘判定，整块标「历史结论（不是事实）……不能当作今天的数字」。
+- `agents/memory.py`：`memory_index` + `memory_fts`（FTS5 trigram，中文子串可搜），索引推演与主题结论；`sync()` 全量补齐，`rebuild()` 可重建。
+- **as-of 截止**：`agent_runs.as_of` 记录面板日期（旧库从 `context_json` 回填）；`for_symbol(symbol, as_of, window_days=180, limit=3)` 只召回截止日之前、窗口内的结论。
+- **检索面**：同标的（决策层）；同主题报告（主题研究，`for_topic`，窗口 365 天）；全文检索 `search(q, as_of)`；同行业补位 `for_industry` **默认关闭**（`MEMORY_PEER_ENABLED=false`），打开后最多 2 条并单独标「同行业对照」。
+- **注入**：交易员与风控负责人带同标的最近 3 条；主题研究带 2 份同主题历史报告；每条带日期 / 裁定 / 事后判定，整块标「不是事实」；`context_json.memory_ids` 落库可审计；正文数字不进 prompt。
+- **预算**：整块 ≤900 字符（≈300 tokens），超了先丢最旧条目；标题截 30 字，日期 / 裁定 / 事后判定保留。
+- **降权**：最近 3 条同标的判定全为「错误」时，只注入 1 条并加警告；块内错误条目最多 2 条。
+- **口径**：`stats.judged` join `agent_reviews`；索引正文只用于全文检索，注入块不含正文。
+- **API / CLI / UI**：`GET /api/memory`、`GET /api/memory/stats`、`POST /api/memory/rebuild`；`scripts/memory.py stats/recent/search/rebuild`；运维面板「记忆」tab。
+- **配对评测**：`scripts/memory_eval.py --paired` 先检查门槛（≥30 上下文 + ≥30 已判定 + ≥30 可配对），再以 temperature 0 只重跑决策层（交易员 → 三方风控 → 负责人），on/off 各一遍，输出 ΔBrier、Δ仓位加权超额与 bootstrap 95% 区间。它不重跑分析师，不替代 P2-5 的完整回放。
 
 **验收**
 
-- 中文子串（如「白酒」）能命中主题报告；代码能命中推演。
-- 第二次推演的报告或 payload 里能看到 3 条历史结论块，且带「不是事实」声明。
-- `python scripts/memory_eval.py` 输出有 / 无记忆两组观察性对照，并声明不是因果结论。
-- 历史结论不得被写成今日数字：与快照比对 0 处泄漏。
+- `pytest backend/tests/test_memory.py backend/tests/test_replay.py -q`：as-of 穿越、180 天窗口、3 连错警告、900 字符预算、rebuild 幂等、中文 2/3 字检索、主题截止、同行业分组、配对摘要。
+- `python scripts/memory.py search 白酒 --as-of 2026-11-27` 只返回 ≤11-27 的记录；`python scripts/memory.py stats` 的 `judged` 等于 `agent_reviews` 中非空判定的数量。
+- `curl /api/memory?q=白酒&as_of=2026-11-27`、`/api/memory/stats`、`POST /api/memory/rebuild` 可用；运维面板能搜到并显示事后判定。
+- `python scripts/memory_eval.py --paired` 在样本不足时明确打印「样本不足」，不跑模型；满足门槛后加 `--live` 才调用模型，输出配对表与 95% 区间。
+- 注入块中不出现历史报告的价格数字（单测断言）；第二次推演 payload 里 `memory_ids` 与块内条目一致。
 
 ### 3.2 因子挖掘
 

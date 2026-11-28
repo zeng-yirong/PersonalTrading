@@ -1278,6 +1278,29 @@ export interface OpsSummary {
   tokens: OpsTokenTotals
 }
 
+/** 记忆检索（goat 3.1）：一条历史结论或历史报告。 */
+export interface MemoryItem {
+  kind: '推演' | '主题'
+  ref_id: number
+  symbol: string | null
+  title: string
+  as_of: string | null
+  decision: string
+  outcome: string | null
+  group: string
+  warning?: boolean
+}
+
+export interface MemoryStats {
+  indexed: number
+  runs: number
+  topics: number
+  judged: number
+  oldest: string | null
+  newest: string | null
+  updated_at: string
+}
+
 /** ``POST /ledger/review/refresh``：复盘状态加上本次写入统计。 */
 export interface OpsReviewRefresh extends OpsReviews {
   refreshed: { runs: number; written: number; skipped: number }
