@@ -186,3 +186,64 @@ def test_match_requires_every_feature(app_db):
     assert experience.match(
         {"rsi14_gte": 65, "close_vs_ma20_gte": 3}, {"rsi14": 70, "close_vs_ma20": 4}
     )
+
+
+def test_status_gate_requires_evidence_and_reason(app_db):
+    with connection() as conn:
+        _seed(conn, 1, "600519", "2026-11-20", position=30, ret20=-5, outcome="看多/错误", ctx=_context("2026-11-20"))
+        _seed(conn, 2, "000001", "2026-11-21", position=25, ret20=-3, outcome="看多/错误", ctx=_context("2026-11-21"))
+    experience.extract()
+    card = experience.list_experiences()[0]
+
+    with pytest.raises(ValueError, match="证据不足"):
+        experience.change_status(card["id"], "active", "人工确认")
+
+    with connection() as conn:
+        _seed(conn, 3, "000858", "2026-11-22", position=40, ret20=-6, outcome="看多/错误", ctx=_context("2026-11-22"))
+    experience.extract()
+    card = experience.list_experiences()[0]
+    assert card["evidence_count"] == 3 and card["can_activate"] is True
+
+    with pytest.raises(ValueError, match="必须写理由"):
+        experience.change_status(card["id"], "active", "")
+
+    active = experience.change_status(card["id"], "active", "3 条独立复盘")
+    assert active is not None and active["status"] == "active"
+
+    features = experience.features_from_context(_context("2026-12-20"))
+    assert len(experience.recall(features, as_of="2026-12-20")) == 1
+
+    with pytest.raises(ValueError, match="必须写理由"):
+        experience.change_status(card["id"], "retired", "")
+    retired = experience.change_status(card["id"], "retired", "后续两次反证")
+    assert retired is not None and retired["status"] == "retired"
+    assert experience.recall(features, as_of="2026-12-20") == []
+
+
+def test_status_transition_whitelist(app_db):
+    with connection() as conn:
+        _seed(conn, 1, "600519", "2026-11-20", position=30, ret20=-5, outcome="看多/错误", ctx=_context("2026-11-20"))
+    experience.extract()
+    card = experience.list_experiences()[0]
+
+    with pytest.raises(ValueError, match="未知状态"):
+        experience.change_status(card["id"], "bogus", "x")
+    assert experience.change_status(card["id"], "candidate", "noop") is not None
+
+    with connection() as conn:
+        conn.execute("UPDATE experiences SET status = 'retired'")
+    with pytest.raises(ValueError, match="不允许"):
+        experience.change_status(card["id"], "active", "想复活但证据不够")
+
+
+def test_details_include_evidence(app_db):
+    with connection() as conn:
+        _seed(conn, 1, "600519", "2026-11-20", position=30, ret20=-5, outcome="看多/错误", ctx=_context("2026-11-20"))
+    experience.extract()
+    card = experience.list_experiences()[0]
+
+    detail = experience.details(card["id"])
+    assert detail is not None
+    assert detail["lesson"] == card["lesson"]
+    assert detail["evidence"][0]["ref_id"] == 1
+    assert detail["evidence"][0]["kind"] == "review"

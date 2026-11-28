@@ -1938,6 +1938,57 @@ details.note summary {
   color: var(--text);
 }
 
+.ops-memory-tools select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.exp-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.exp-detail {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-soft);
+}
+
+.exp-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.exp-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.exp-detail-block {
+  margin-top: 12px;
+}
+
+.exp-detail-block code {
+  display: block;
+  margin-top: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .ops-memory-tools input[type='date'] {
   flex: 0 0 auto;
   min-width: 145px;

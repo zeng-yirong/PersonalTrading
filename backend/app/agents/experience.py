@@ -23,6 +23,13 @@ from typing import Any, Optional
 from app.db import connection, now_iso
 
 MAX_EVIDENCE_JSON = 12000
+STATUSES = ("candidate", "active", "retired")
+ACTIVE_MIN_EVIDENCE = 3
+TRANSITIONS = {
+    "candidate": {"active", "retired"},
+    "active": {"candidate", "retired"},
+    "retired": {"candidate"},
+}
 
 _SCHEMA = (
     """CREATE TABLE IF NOT EXISTS experiences (
@@ -37,6 +44,8 @@ _SCHEMA = (
         evidence_json TEXT NOT NULL,
         confidence INTEGER NOT NULL DEFAULT 40,
         status TEXT NOT NULL DEFAULT 'candidate',
+        status_reason TEXT,
+        status_changed_at TEXT,
         as_of TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -63,6 +72,10 @@ def ensure_schema() -> None:
     with connection() as conn:
         for statement in _SCHEMA:
             conn.execute(statement)
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(experiences)")}
+        for column in ("status_reason", "status_changed_at"):
+            if column not in existing:
+                conn.execute(f"ALTER TABLE experiences ADD COLUMN {column} TEXT")
 
 
 def _iso(value: Any) -> Optional[str]:
@@ -181,8 +194,13 @@ def _item(row: Any) -> dict[str, Any]:
         "action": json.loads(row["action_json"] or "{}"),
         "confidence": row["confidence"],
         "status": row["status"],
+        "status_reason": row["status_reason"] if "status_reason" in row.keys() else None,
+        "status_changed_at": (
+            row["status_changed_at"] if "status_changed_at" in row.keys() else None
+        ),
         "as_of": row["as_of"],
         "evidence_count": len(evidence),
+        "can_activate": row["status"] == "candidate" and len(evidence) >= ACTIVE_MIN_EVIDENCE,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "version": row["version"],
@@ -387,6 +405,46 @@ def shadow_recall(run_id: int, ctx: dict[str, Any]) -> int:
                 ),
             )
     return len(items)
+
+
+# -------------------------------------------------------------------- status
+def change_status(
+    experience_id: int, status: str, reason: str
+) -> Optional[dict[str, Any]]:
+    """Manual promotion / retirement. Evidence gate and reason are enforced."""
+    ensure_schema()
+    target = (status or "").strip()
+    if target not in STATUSES:
+        raise ValueError(f"未知状态：{status}")
+    note = (reason or "").strip()
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM experiences WHERE id = ?", (int(experience_id),)
+        ).fetchone()
+        if row is None:
+            return None
+        current = row["status"]
+        if target == current:
+            return _item(row)
+        if target not in TRANSITIONS.get(current, set()):
+            raise ValueError(f"不允许 {current} → {target}")
+        if target == "active":
+            evidence = json.loads(row["evidence_json"] or "[]")
+            if len(evidence) < ACTIVE_MIN_EVIDENCE:
+                raise ValueError(
+                    f"证据不足：{len(evidence)}/{ACTIVE_MIN_EVIDENCE}，先积累独立复盘"
+                )
+        if not note:
+            raise ValueError("状态变更必须写理由")
+        conn.execute(
+            "UPDATE experiences SET status = ?, status_reason = ?, status_changed_at = ?, "
+            "updated_at = ?, version = version + 1 WHERE id = ?",
+            (target, note, now_iso(), now_iso(), int(experience_id)),
+        )
+        updated = conn.execute(
+            "SELECT * FROM experiences WHERE id = ?", (int(experience_id),)
+        ).fetchone()
+    return _item(updated)
 
 
 # --------------------------------------------------------------------- reads

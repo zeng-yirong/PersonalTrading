@@ -37,6 +37,11 @@ def main(argv: list[str] | None = None) -> int:
     recalls.add_argument("--run-id", type=int)
     recalls.add_argument("--limit", type=int, default=50)
 
+    status = sub.add_parser("status", help="人工晋级 / 退役")
+    status.add_argument("--id", type=int, required=True)
+    status.add_argument("--status", required=True, choices=["candidate", "active", "retired"])
+    status.add_argument("--reason", required=True)
+
     args = parser.parse_args(argv)
     init_db()
 
@@ -58,6 +63,17 @@ def main(argv: list[str] | None = None) -> int:
             )
         if not items:
             print("没有匹配的经验卡。")
+        return 0
+    if args.command == "status":
+        try:
+            item = experience.change_status(args.id, args.status, args.reason)
+        except ValueError as exc:
+            print(f"失败：{exc}")
+            return 1
+        if item is None:
+            print("失败：经验卡不存在")
+            return 1
+        print(f"已更新：{item['status']}｜{item['lesson']}")
         return 0
     rows = experience.recalls(limit=args.limit, run_id=args.run_id)
     for row in rows:

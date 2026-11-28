@@ -5,6 +5,9 @@ import type {
   BacktestResult,
   BacktestRunSummary,
   ChartData,
+  ExperienceDetail,
+  ExperienceItem,
+  ExperienceStats,
   FactorMeta,
   FactorRequest,
   FactorRunDetail,
@@ -242,6 +245,23 @@ export const api = {
   },
   memoryStats: () => request<MemoryStats>('/memory/stats'),
   memoryRebuild: () => request<{ indexed: number }>('/memory/rebuild', { method: 'POST' }),
+
+  experiences: (params: { status?: string; scope?: string; q?: string; limit?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.status) query.set('status', params.status)
+    if (params.scope) query.set('scope', params.scope)
+    if (params.q) query.set('q', params.q)
+    if (params.limit) query.set('limit', String(params.limit))
+    return request<ExperienceItem[]>(`/experiences?${query.toString()}`)
+  },
+  experienceStats: () => request<ExperienceStats>('/experiences/stats'),
+  experienceExtract: () => request<{ created: number; merged: number; skipped: number }>('/experiences/extract', { method: 'POST' }),
+  experienceDetail: (id: number) => request<ExperienceDetail>(`/experiences/${id}`),
+  experienceStatus: (id: number, status: string, reason: string) =>
+    request<ExperienceItem>(`/experiences/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status, reason }),
+    }),
   opsRepair: (dataset: string, days = 5) =>
     request<OpsRepair>(
       `/data/repair?dataset=${encodeURIComponent(dataset)}&days=${days}`,

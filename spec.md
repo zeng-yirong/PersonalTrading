@@ -357,10 +357,10 @@
 
 3.1 是**情景记忆**：这只票上次怎么判断、后来怎样，按 `symbol` 召回。3.1.1 是**经验记忆**：从复盘、策略验证、因子复核里抽出可复用的教训（“这类情形通常错在哪”），**只在作出新决策时召回**；策略验证与因子复核是经验的来源，不是召回入口。3.0 的技能是人写的纪律；经验卡是从结果里长出来的，必须过证据门槛，能降级、能淘汰。
 
-**实现（P8-0 已落地；P8-1~P8-3 待建）**
+**实现（P8-0 / P8-1 已落地；P8-2~P8-3 待建）**
 
 - **P8-0 影子召回**：`agents/experience.py` 建 `experiences` + `experience_recalls`；`extract()` 从已复盘记录按规则抽候选（逆风加仓 / 强市空仓 / 超买追多），按 fingerprint 去重合并证据；`shadow_recall()` 在推演开始时只记录“会召回哪些卡”，`injected=0`，**不改 prompt**。`paper.review.refresh()` 写完复盘自动抽取；API `/api/experiences` 与 `scripts/experience.py` 可查。当前真实库尚未到 T+20，抽取结果为 0 张卡。
-- **P8-1 待建**：证据门槛（≥3 独立证据）、人工确认晋级、`POST /api/experiences/{id}/status`、运维「经验」tab。
+- **P8-1 证据门槛与人工确认**：`change_status()` 白名单（candidate→active/retired、active→candidate/retired、retired→candidate）；升 active 必须 ≥3 条独立证据，任何状态变更必须写 reason；`POST /api/experiences/{id}/status`；运维「经验」tab 可看证据、执行生效/退役；candidate 与 retired 都不进召回。
 - **P8-2 待建**：决策层注入（交易员 / 风控负责人，top 2，≤300 字符，与 3.1 分块），`experience_ids` 落库。
 - **P8-3 待建**：影子精确率报表、experience on/off 配对回放、经验固化为 skill/guard 后退役。
 - **数据模型**：`experiences(id, scope, scope_key, source, trigger_json, lesson, action_json, evidence_json, confidence, status, as_of, created_at, updated_at, version)` + `experience_fts`（trigram）。`scope` ∈ market / industry / decision / role；`source` ∈ review / strategy / factor；`status` ∈ candidate / active / retired；`trigger_json` 存**决策时能判定**的条件（市场状态、波动、宽度、行业、持有周期、动作、信心档），`evidence_json` 存 `{kind, ref_id, date, metric}`。
@@ -383,6 +383,7 @@
 **验收**
 
 - 造 3 条不同标的、同一失败模式的复盘 → 只生成 1 张候选卡，证据 n=3；n<3 时 `recall()` 返回空。
+- P8-1：2 条证据调 `status=active` 返回 400；3 条 + reason 才 active；无 reason 返回 400；active 退役后 `recall()` 为空。
 - 证据够 3 条但未人工确认时仍是 candidate，`recall()` 返回空；确认 `active` 后才注入。
 - `POST /api/experiences/extract` 连跑两次：候选数不变、证据数不翻倍（hash 去重）。
 - `as_of` 截止：晚于截止日的证据不进召回；`scope` 过滤不串域（行业卡只进同行业决策，`decision` 卡按条件匹配；`source` 不参与过滤）。

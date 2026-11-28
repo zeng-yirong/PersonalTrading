@@ -1301,6 +1301,61 @@ export interface MemoryStats {
   updated_at: string
 }
 
+export type ExperienceStatus = 'candidate' | 'active' | 'retired'
+
+export interface ExperienceItem {
+  id: number
+  fingerprint: string
+  scope: string
+  scope_key: string | null
+  source: string
+  trigger: Record<string, number | string>
+  lesson: string
+  action: Record<string, unknown>
+  confidence: number
+  status: ExperienceStatus
+  status_reason: string | null
+  status_changed_at: string | null
+  as_of: string | null
+  evidence_count: number
+  can_activate: boolean
+  created_at: string
+  updated_at: string
+  version: number
+}
+
+export interface ExperienceEvidence {
+  kind: string
+  ref_id: number
+  symbol?: string
+  date?: string | null
+  metric?: number | null
+  excess?: number | null
+  outcome?: string
+}
+
+export interface ExperienceRecall {
+  run_id: number
+  score: number
+  status: string
+  injected: number
+  created_at: string
+}
+
+export interface ExperienceDetail extends ExperienceItem {
+  evidence: ExperienceEvidence[]
+  recalls: ExperienceRecall[]
+}
+
+export interface ExperienceStats {
+  total: number
+  by_status: Record<string, number>
+  by_scope: Record<string, number>
+  shadow_recalls: number
+  injected_recalls: number
+  updated_at: string
+}
+
 /** ``POST /ledger/review/refresh``：复盘状态加上本次写入统计。 */
 export interface OpsReviewRefresh extends OpsReviews {
   refreshed: { runs: number; written: number; skipped: number }

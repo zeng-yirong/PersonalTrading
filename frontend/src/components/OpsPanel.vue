@@ -3,6 +3,7 @@ import * as echarts from 'echarts'
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
 import MemoryPanel from './MemoryPanel.vue'
+import ExperiencePanel from './ExperiencePanel.vue'
 import type {
   OpsChain,
   OpsEntry,
@@ -17,7 +18,7 @@ import type {
   OpsUsagePoint,
 } from '../types'
 
-type OpsTab = 'ledger' | 'cost' | 'health' | 'memory'
+type OpsTab = 'ledger' | 'cost' | 'health' | 'memory' | 'experience'
 
 interface UsageTipParam {
   dataIndex?: number
@@ -36,6 +37,7 @@ const TAB_ITEMS: Array<{ label: string; value: OpsTab }> = [
   { label: '成本', value: 'cost' },
   { label: '数据健康', value: 'health' },
   { label: '记忆', value: 'memory' },
+  { label: '经验', value: 'experience' },
 ]
 
 const KIND_CLASS: Record<OpsKind, string> = {
@@ -803,6 +805,10 @@ onActivated(() => {
 
       <div v-else-if="tab === 'memory'">
         <MemoryPanel />
+      </div>
+
+      <div v-else-if="tab === 'experience'">
+        <ExperiencePanel />
       </div>
     </template>
   </section>
