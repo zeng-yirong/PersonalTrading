@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any, AsyncIterator, Optional
 
 from app.agents import context as ctxmod
+from app.agents import experience
 from app.agents import guards
 from app.agents import store as agent_store
 from app.agents.graph import NODE_LABELS, build_graph
@@ -293,6 +294,12 @@ async def stream_research(
         )
         if run_id and skill_label:
             await asyncio.to_thread(skills.record, "agents", run_id, "trader")
+        if run_id:
+            # P8-0 影子召回：只记录“当时会召回哪些经验”，不改 prompt。
+            try:
+                await asyncio.to_thread(experience.shadow_recall, run_id, ctx)
+            except Exception:  # noqa: BLE001 - 影子失败不该挡住推演
+                pass
 
     yield {
         "type": "run_start",

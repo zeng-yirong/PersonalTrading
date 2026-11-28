@@ -34,6 +34,7 @@
 | 3.0 技能加载 | `app/skills/`、`agents/runner.py`、`agents/commentary.py` | `pytest`、`commentary` 接口 |
 | 3.0.1 技能进化 | 待建：`scripts/replay.py`、`skill_runs` 表 | 回放 + 配对 bootstrap |
 | 3.1 记忆检索 | `agents/memory.py`、`memory_index` / `memory_fts` | `scripts/memory_eval.py` |
+| 3.1.1 经验记忆 | 待建：`agents/experience.py`、`experiences` / `experience_fts` 表 | `/api/experiences`、`scripts/experience.py` |
 | 3.2 因子挖掘 | `factor/library.py`、`promoted.py`、`evaluate.py`、`service.py` | `scripts/factor.py` |
 | 3.2.1 外部因子导入 | `factor/alpha158.py`、`academic.py`、`gtja.py`、`fundamental.py` | `factor.py --source ... --incremental` |
 | 3.3 策略自进化 | `strategy/store.py`、待建 `strategy/generator.py` | `/api/strategies` |
@@ -349,6 +350,46 @@
 - `curl /api/memory?q=白酒&as_of=2026-11-27`、`/api/memory/stats`、`POST /api/memory/rebuild` 可用；运维面板能搜到并显示事后判定。
 - `python scripts/memory_eval.py --paired` 在样本不足时明确打印「样本不足」，不跑模型；满足门槛后加 `--live` 才调用模型，输出配对表与 95% 区间。
 - 注入块中不出现历史报告的价格数字（单测断言）；第二次推演 payload 里 `memory_ids` 与块内条目一致。
+
+### 3.1.1 经验记忆
+
+**它和 3.1 的区别**
+
+3.1 是**情景记忆**：这只票上次怎么判断、后来怎样，按 `symbol` 召回。3.1.1 是**经验记忆**：从复盘、策略验证、因子复核里抽出可复用的教训（“这类情形通常错在哪”），**只在作出新决策时召回**；策略验证与因子复核是经验的来源，不是召回入口。3.0 的技能是人写的纪律；经验卡是从结果里长出来的，必须过证据门槛，能降级、能淘汰。
+
+**实现（P8-0 已落地；P8-1~P8-3 待建）**
+
+- **P8-0 影子召回**：`agents/experience.py` 建 `experiences` + `experience_recalls`；`extract()` 从已复盘记录按规则抽候选（逆风加仓 / 强市空仓 / 超买追多），按 fingerprint 去重合并证据；`shadow_recall()` 在推演开始时只记录“会召回哪些卡”，`injected=0`，**不改 prompt**。`paper.review.refresh()` 写完复盘自动抽取；API `/api/experiences` 与 `scripts/experience.py` 可查。当前真实库尚未到 T+20，抽取结果为 0 张卡。
+- **P8-1 待建**：证据门槛（≥3 独立证据）、人工确认晋级、`POST /api/experiences/{id}/status`、运维「经验」tab。
+- **P8-2 待建**：决策层注入（交易员 / 风控负责人，top 2，≤300 字符，与 3.1 分块），`experience_ids` 落库。
+- **P8-3 待建**：影子精确率报表、experience on/off 配对回放、经验固化为 skill/guard 后退役。
+- **数据模型**：`experiences(id, scope, scope_key, source, trigger_json, lesson, action_json, evidence_json, confidence, status, as_of, created_at, updated_at, version)` + `experience_fts`（trigram）。`scope` ∈ market / industry / decision / role；`source` ∈ review / strategy / factor；`status` ∈ candidate / active / retired；`trigger_json` 存**决策时能判定**的条件（市场状态、波动、宽度、行业、持有周期、动作、信心档），`evidence_json` 存 `{kind, ref_id, date, metric}`。
+- **抽取来源**（默认纯规则、0 次模型调用）：
+  - `agent_reviews`：目标价无锚、止损过宽、仓位与信心不匹配、逆风加仓、失效条件未执行；按结果对 / 错生成候选。
+  - `strategy_runs` / `horizon.gate_check`：样本外超额 ≤0、回撤破线、与 champion 相关 ≥0.8、邻域不稳、滑点后转负、周期用错；**能落到决策动作的**才转成 decision scope，纯“选哪个策略”的结论只留在验证报告里，不进决策记忆。
+  - `factor_runs`：样本外符号翻转、残差 IC 不过；同样只在能转成决策动作时入库。
+- **去重与证据**：按 `hash(scope, scope_key, trigger_json, lesson)` 去重；同一教训合并证据并 `version++`，不新增重复卡。
+- **生命周期**：候选只有 1–2 条证据，**不注入**；≥3 条独立证据（不同标的 / 不同策略，或两段不重叠区间）才升 `active`，升级需人工确认；后续出现 ≥2 条反证或样本外翻转 → `retired`，留档不删。`confidence = min(90, 40 + 10×独立证据数 − 15×反证数)`，样本外证据 +10。
+- **召回（只在新决策时）**：
+  - 交易员与风控负责人：按行业 + 当前市场状态 + 持有周期 / 动作召回 top 2，各带一块，标「经验（不是事实）· 来自 N 次复盘」，整块 ≤300 字符。
+  - 策略库 / 周报：只读展示相关经验，供人判断，**不自动注入、不改门槛**。
+  - 决策 Agent 也可以显式查询（scope + 关键词），不必等自动注入。
+  - 主题研究：按行业召回 top 2，可选。
+  - 与 3.1 历史结论**分块**，不混在同一条 prompt 里。
+- **时点**：抽取在 18:20 复盘刷新之后；策略经验在周度全量回测之后；`as_of` 取最新证据日，召回只看到截止日前的经验。
+- **API / CLI / UI**：`GET /api/experiences?scope=&status=&q=&as_of=`、`POST /api/experiences/extract`、`POST /api/experiences/{id}/status`（必须带 reason）；`scripts/experience.py stats/extract/search/retire`；运维面板「经验」tab（证据、状态、来源）。
+- **不训练权重**：经验仍是文本检索；不做微调。
+
+**验收**
+
+- 造 3 条不同标的、同一失败模式的复盘 → 只生成 1 张候选卡，证据 n=3；n<3 时 `recall()` 返回空。
+- 证据够 3 条但未人工确认时仍是 candidate，`recall()` 返回空；确认 `active` 后才注入。
+- `POST /api/experiences/extract` 连跑两次：候选数不变、证据数不翻倍（hash 去重）。
+- `as_of` 截止：晚于截止日的证据不进召回；`scope` 过滤不串域（行业卡只进同行业决策，`decision` 卡按条件匹配；`source` 不参与过滤）。
+- 召回块带「经验（不是事实）」「来自 N 次复盘」；决策块 ≤300 字符；与 3.1 块分开渲染。
+- 反证：同一教训出现 2 条反证 → 状态 `retired`，仍可查到，但不再注入。
+- 同输入重复抽取，卡片 id / 哈希 / 证据顺序完全一致；0 次模型调用。
+- 测试：抽取、去重合并、证据门槛、as-of、域过滤、预算、退役、API/CLI 各 1–2 条。
 
 ### 3.2 因子挖掘
 

@@ -258,6 +258,10 @@ stage → run_start → (node_start → node_end) ×N → run_end
 
 这条措辞是必要的：模型很容易把历史价格当今日价格。
 
+### 5.3 经验记忆（P8-0 影子阶段）
+
+`agents/experience.py` 把复盘里的可复用教训抽成结构化卡片：`scope`（market / industry / decision / role）、`trigger`（决策前可判定的条件）、`lesson`、`action`、`evidence`、`confidence`、`status`。P8-0 只从 `agent_reviews` 抽候选（逆风加仓 / 强市空仓 / 超买追多），按 fingerprint 去重合并证据；推演开始时只写 `experience_recalls`（`injected=0`），**不改 prompt**。候选卡永不注入；≥3 条独立证据 + 人工确认才 active，P8-2 才进交易员 / 风控负责人。
+
 ---
 
 ## 6. 主题研究

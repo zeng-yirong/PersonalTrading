@@ -15,6 +15,7 @@ from app.db import init_db
 from app.routers import (
     agents,
     backtest,
+    experiences,
     factors,
     market,
     memory,
@@ -76,6 +77,7 @@ app.include_router(paper.router)
 app.include_router(strategy.router)
 app.include_router(ops.router)
 app.include_router(memory.router)
+app.include_router(experiences.router)
 
 
 @app.get("/")

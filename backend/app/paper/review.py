@@ -185,7 +185,19 @@ def refresh(limit: int = 200) -> dict[str, Any]:
                 rows,
             )
         written = len(rows)
-    return {"runs": len(runs), "written": written, "skipped": skipped}
+    extracted: dict[str, Any] = {}
+    try:
+        from app.agents import experience
+
+        extracted = experience.extract()
+    except Exception as exc:  # noqa: BLE001 - 经验抽取失败不该回滚复盘
+        extracted = {"error": str(exc)}
+    return {
+        "runs": len(runs),
+        "written": written,
+        "skipped": skipped,
+        "experiences": extracted,
+    }
 
 
 def list_reviews(limit: int = 50) -> list[dict[str, Any]]:
