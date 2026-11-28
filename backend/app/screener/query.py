@@ -159,9 +159,15 @@ class ScreenQuery:
         return " AND ".join(clauses), params
 
     def order_columns(self) -> str:
-        """The ORDER BY body (no keyword) — reused by the backtest's row_number."""
+        """The ORDER BY body (no keyword) — reused by the backtest's row_number.
+
+        末尾固定追加 ``symbol ASC``：只按因子排序时并列值极多（例如"近5日涨停
+        次数"），DuckDB 对并列行的顺序不作保证，同一份面板重跑会选出不同的组合
+        （2026-11-28 实测：同一预设两次跑出 -53.21% 与 -53.48%）。这违反 goat.md
+        的第 3 条不变量，所以并列时一律按代码升序。
+        """
         if not self.sort:
-            return "total_mv DESC NULLS LAST"
+            return "total_mv DESC NULLS LAST, symbol ASC"
         parts = []
         for item in self.sort:
             try:
@@ -170,6 +176,7 @@ class ScreenQuery:
                 raise QueryError(str(exc)) from exc
             direction = "DESC" if item.get("desc", True) else "ASC"
             parts.append(f'"{item["field"]}" {direction} NULLS LAST')
+        parts.append("symbol ASC")
         return ", ".join(parts)
 
     def order_by(self) -> str:

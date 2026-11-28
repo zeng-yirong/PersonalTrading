@@ -226,3 +226,13 @@ def test_run_response_also_carries_the_query(snapshot):
     result = asyncio.run(screener_router.run_query(screener_router.QueryModel(**payload)))
 
     assert result["query"]["filters"] == payload["filters"]
+
+def test_order_by_breaks_ties_with_symbol():
+    """并列值必须按代码兜底，否则同一面板重跑会选出不同组合（结果不可复现）。"""
+    query = screen_query.ScreenQuery.from_dict(
+        {"sort": [{"field": "limit_up_5d", "desc": True}], "filters": []}
+    )
+    assert query.order_columns().endswith("symbol ASC")
+
+    plain = screen_query.ScreenQuery.from_dict({"filters": []})
+    assert "symbol ASC" in plain.order_columns()
