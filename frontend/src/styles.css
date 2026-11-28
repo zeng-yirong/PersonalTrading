@@ -3845,3 +3845,4 @@ details.note summary {
   color: var(--muted);
   border: 1px dashed var(--border);
 }
+.status-template { color: var(--muted); border-style: dashed; }

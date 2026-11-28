@@ -56,6 +56,7 @@
 | P6-6b | **引擎补指标**：`avg_holding_days` / `turnover_pct` / `fee_drag_pct` / `win_loss_ratio` / `skipped_buys` | P6-6a | ✅ 2026-11-28：短线圈全用得上（涨停回踩 765 笔、平均持有 3.1 天、年化费用拖累 8.2%） | 1 天 |
 | P6-6c | **分组排名 + 分组门槛**：组内排名、不跨组混排；门槛逐项通过/失败 | P6-6b | ✅ 2026-11-28：`horizon.gate_check` 逐项列出；批次里带 horizon/params/gate | 1 天 |
 | P6-6d | **12 个预设按周期重新归类并重跑**，给出分组后排名 | P6-6c | ✅ 2026-11-28：短线 4 / 中线 4 / 长线 4；门槛只放行长线两条（低波动、高股息防御） | 0.5 天 |
+| P6-7 | **语义纠偏**：12 个示例从 champion 改为 `template`（未验证），新增 `provenance_json`（origin / 依据 / verified），周度回测改跑 champion + template | P6-6 | ✅ 2026-11-28：库里 0 条 champion、12 条 template；provenance 写明"手工示例，未做参数搜索/样本外验证" | 0.5 天 |
 
 ### 2.4 预注册门槛（写进代码常量，不事后改）
 

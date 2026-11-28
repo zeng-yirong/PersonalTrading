@@ -30,6 +30,7 @@ const visible = computed(() =>
 )
 
 const STATUS_TEXT: Record<StrategyStatus, string> = {
+  template: '模板',
   champion: '正式',
   watch: '观察',
   candidate: '候选',
@@ -57,7 +58,12 @@ async function load() {
 }
 
 function canUpgrade(row: StrategyRow): boolean {
-  return row.status === 'candidate' || row.status === 'watch' || row.status === 'retired'
+  return (
+    row.status === 'template' ||
+    row.status === 'candidate' ||
+    row.status === 'watch' ||
+    row.status === 'retired'
+  )
 }
 
 function canDowngrade(row: StrategyRow): boolean {
@@ -88,7 +94,8 @@ async function move(row: StrategyRow, target: StrategyStatus, askReason = false)
 }
 
 async function upgrade(row: StrategyRow) {
-  const target: StrategyStatus = row.status === 'candidate' ? 'watch' : 'champion'
+  const target: StrategyStatus =
+    row.status === 'template' ? 'candidate' : row.status === 'candidate' ? 'watch' : 'champion'
   await move(row, target, true)
 }
 

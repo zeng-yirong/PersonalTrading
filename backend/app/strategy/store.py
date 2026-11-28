@@ -17,9 +17,19 @@ from typing import Any, Optional
 from app.db import connection, now_iso
 from app.screener.presets import PRESETS
 
-STATUSES = ("candidate", "watch", "champion", "retired", "paused")
-UP = {"candidate": "watch", "watch": "champion", "retired": "watch"}
-DOWN = {"champion": "watch", "watch": "candidate"}
+STATUSES = ("template", "candidate", "watch", "champion", "retired", "paused")
+UP = {"template": "candidate", "candidate": "watch", "watch": "champion", "retired": "watch"}
+DOWN = {"champion": "watch", "watch": "candidate", "candidate": "template"}
+
+# 模板的出身写死在一处：这批条件来自 2026-11-24 选股器 UI 的手写示例，
+# 2026-11-27 手工转成结构化条件，**没有做过参数搜索、样本外检验或分组测试**。
+LEGACY_ORIGIN = {
+    "origin": "hand",
+    "created": "2026-11-24",
+    "rationale": "选股器 UI 示例文案，按行业俗成口径手写阈值；2026-11-27 手工转成结构化条件",
+    "verified": False,
+    "note": "未做参数搜索 / 样本外 / 分组测试，仅作一键示例",
+}
 
 
 class StrategyError(ValueError):
@@ -27,7 +37,11 @@ class StrategyError(ValueError):
 
 
 def seed_from_presets() -> int:
-    """把 presets.json 导入为 champion（幂等：已存在就跳过）。"""
+    """把 presets.json 导入为**模板**（幂等：已存在就跳过）。
+
+    注意状态是 ``template`` 而不是 ``champion``：这 12 条是手写示例，没经过
+    参数搜索与样本外检验。champion 只留给过了门槛、走完观察期的策略。
+    """
     written = 0
     with connection() as conn:
         for preset in PRESETS:
@@ -38,8 +52,8 @@ def seed_from_presets() -> int:
                 continue
             conn.execute(
                 "INSERT INTO strategies(id, name, query_json, params_json, source, horizon, "
-                "status, created_at, promoted_at, notes) "
-                "VALUES(?, ?, ?, ?, 'preset', ?, 'champion', ?, ?, ?)",
+                "status, created_at, notes, provenance_json) "
+                "VALUES(?, ?, ?, ?, 'template', ?, 'template', ?, ?, ?)",
                 (
                     preset.id,
                     preset.label,
@@ -47,12 +61,36 @@ def seed_from_presets() -> int:
                     json.dumps({}),
                     preset.horizon,
                     now_iso(),
-                    now_iso(),
                     preset.text,
+                    json.dumps(LEGACY_ORIGIN, ensure_ascii=False),
                 ),
             )
             written += 1
     return written
+
+
+def backfill_legacy_presets() -> int:
+    """把早期错误导入成 champion 的示例行改回 template（只做一次）。
+
+    条件：``source='template'`` 或旧库的 ``source='preset'``、``provenance_json`` 为空。
+    已经人工升级过的行（provenance 已写）不会被动到。
+    """
+    changed = 0
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT id, status, source, provenance_json FROM strategies"
+        ).fetchall()
+        for row in rows:
+            if row["provenance_json"] or row["source"] not in {"preset", "template"}:
+                continue
+            status = "template" if row["status"] == "champion" else row["status"]
+            conn.execute(
+                "UPDATE strategies SET source = 'template', status = ?, provenance_json = ? "
+                "WHERE id = ?",
+                (status, json.dumps(LEGACY_ORIGIN, ensure_ascii=False), row["id"]),
+            )
+            changed += 1
+    return changed
 
 
 def _row_to_strategy(row: Any) -> dict[str, Any]:
@@ -69,6 +107,11 @@ def _row_to_strategy(row: Any) -> dict[str, Any]:
         "retired_at": row["retired_at"],
         "retire_reason": row["retire_reason"],
         "notes": row["notes"],
+        "provenance": (
+            json.loads(row["provenance_json"])
+            if "provenance_json" in row.keys() and row["provenance_json"]
+            else None
+        ),
     }
 
 
@@ -85,6 +128,19 @@ def list_strategies(status: str = "") -> list[dict[str, Any]]:
     return [_row_to_strategy(row) for row in rows]
 
 
+def list_testable() -> list[dict[str, Any]]:
+    """每周要跑的策略：正式 + 模板。
+
+    模板也要跑——它们的成绩正是"这套示例值不值得升级成候选"的依据。
+    """
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM strategies WHERE status IN ('champion', 'template') "
+            "ORDER BY CASE status WHEN 'champion' THEN 0 ELSE 1 END, name"
+        ).fetchall()
+    return [_row_to_strategy(row) for row in rows]
+
+
 def get(strategy_id: str) -> Optional[dict[str, Any]]:
     with connection() as conn:
         row = conn.execute("SELECT * FROM strategies WHERE id = ?", (strategy_id,)).fetchone()
@@ -97,8 +153,10 @@ def create(
     *,
     source: str = "manual",
     status: str = "candidate",
+    horizon: str = "long",
     params: Optional[dict[str, Any]] = None,
     notes: str = "",
+    provenance: Optional[dict[str, Any]] = None,
     strategy_id: Optional[str] = None,
 ) -> dict[str, Any]:
     if status not in STATUSES:
@@ -106,18 +164,22 @@ def create(
     identifier = strategy_id or f"cand-{date.today():%Y%m%d}-{_next_index()}"
     with connection() as conn:
         conn.execute(
-            "INSERT INTO strategies(id, name, query_json, params_json, source, status, "
-            "created_at, promoted_at, notes) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO strategies(id, name, query_json, params_json, source, horizon, status, "
+            "created_at, promoted_at, notes, provenance_json) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 identifier,
                 name,
                 json.dumps(query, ensure_ascii=False),
-                json.dumps(params or {"rebalance": 20, "top_n": 10}),
+                json.dumps(params or {}),
                 source,
+                horizon,
                 status,
                 now_iso(),
                 now_iso() if status == "champion" else None,
                 notes,
+                json.dumps(provenance or {"origin": source, "verified": False},
+                           ensure_ascii=False),
             ),
         )
     return get(identifier) or {}

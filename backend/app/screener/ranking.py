@@ -72,7 +72,7 @@ def run_all(
     from app.backtest import service as backtest_service
     from app.strategy import horizon as horizon_mod
 
-    strategies = strategy_store.list_strategies("champion")
+    strategies = strategy_store.list_testable()
     rows: list[dict[str, Any]] = []
     end = _panel_end()
 
@@ -234,7 +234,11 @@ def describe() -> dict[str, Any]:
     """给选股页：champion 清单 + 最近一批排名（按周期分组排序）。"""
     from app.strategy import horizon as horizon_mod
 
-    champions = strategy_store.list_strategies("champion")
+    champions = [
+        item
+        for item in strategy_store.list_strategies("")
+        if item["status"] in {"champion", "template"}
+    ]
     batch = latest()
     rank_of = {
         row["id"]: (row.get("rank"), row.get("horizon") or "long")

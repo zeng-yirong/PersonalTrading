@@ -182,7 +182,8 @@ CREATE TABLE IF NOT EXISTS strategies (
     promoted_at TEXT,
     retired_at TEXT,
     retire_reason TEXT,
-    notes TEXT
+    notes TEXT,
+    provenance_json TEXT         -- 来源：origin / 依据 / 建立时的面板日期
 );
 
 CREATE INDEX IF NOT EXISTS idx_strategies_status ON strategies(status);
@@ -316,11 +317,13 @@ def init_db() -> None:
     with connection() as conn:
         conn.executescript(SCHEMA)
         _migrate(conn)
-    # 首次启动把 presets.json 导入为 champion（幂等）。导入失败不该挡住启动。
+    # 首次启动把 presets.json 导入为模板（幂等）；旧库把误标成 champion 的示例行改回
+    # template。两者失败都不该挡住启动。
     try:
         from app.strategy import store as strategy_store
 
         strategy_store.seed_from_presets()
+        strategy_store.backfill_legacy_presets()
     except Exception:  # noqa: BLE001 - 冷启动时策略表可能还没建好
         pass
 
@@ -339,6 +342,7 @@ def _migrate(conn) -> None:
         ("agent_runs", "skill_version", "TEXT"),
         ("paper_positions", "entry_adj", "REAL"),
         ("strategies", "horizon", "TEXT DEFAULT 'long'"),
+        ("strategies", "provenance_json", "TEXT"),
         ("watchlist", "added_trade_date", "TEXT"),
         ("watchlist", "added_close", "REAL"),
         ("watchlist", "added_adj", "REAL"),

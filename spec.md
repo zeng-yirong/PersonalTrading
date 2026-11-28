@@ -348,7 +348,9 @@
 
 **实现**
 
-- `strategy/store.py`：`strategies` / `strategy_runs` 两张表 + 窄状态机（candidate → watch → champion，可降级，任意状态可淘汰且必须带 reason），`seed_from_presets()` 幂等导入（P6-0 / P6-1 已完成）。
+- `strategy/store.py`：`strategies` / `strategy_runs` 两张表 + 窄状态机（template → candidate → watch → champion，可逐级降级，任意状态可淘汰且必须带 reason）。
+- `seed_from_presets()` 幂等导入**模板**（`status=template`，不是 champion）：这 12 条是 2026-11-24 选股器 UI 的手写示例，**没有做过参数搜索 / 样本外 / 分组测试**；`provenance_json` 记录 `origin=hand`、`verified=false`、口头依据与建立时间。旧库中误标为 champion 的示例行由 `backfill_legacy_presets()` 一次性改回 template（已人工升级过的行不动）。
+- 每周全量回测跑的是 `list_testable()`（champion + template）：模板的成绩正是"值不值得升为候选"的依据；champion 只留给过了门槛、走完观察期的策略。
 - 候选生成（待建，P6-2）：`strategy/generator.py` 三条路——因子组合（1–3 个面板因子 + 方向 / 分位阈值）、参数邻域（champion 阈值 ± 20%）、模板（估值 / 质量 / 动量 / 情绪）；输出统一 `ScreenQuery`，复用回测引擎。
 - 门槛（P6-4）：`CHAMPION_GATE`（观察 8 周、最近 12 个月超额 > 0、回撤 ≤ 25%、胜率 ≥ 50%、与任一 champion 日收益相关 < 0.8、滑点 5→20bp 仍为正、阈值 ±20% 的 5 个点里 ≥ 4 个超额为正）；`RETIRE_RULE`（连续 12 周跑输 / 回撤破 -30% / 连续 12 周后 25%）；不足 8 周不下淘汰结论。
 - 建议（P6-3）：每周六 09:00 全量跑 1 年 + 2 年两个窗口，出「建议晋级 / 淘汰」清单，只建议不执行；状态变更人工确认并写理由。

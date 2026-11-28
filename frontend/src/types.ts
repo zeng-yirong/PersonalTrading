@@ -1,4 +1,4 @@
-export type AssetType = 'stock' | 'etf'
+﻿export type AssetType = 'stock' | 'etf'
 
 export interface WatchlistItem {
   symbol: string
@@ -504,7 +504,7 @@ export interface StrategyMetrics {
   trades?: number | null
 }
 
-export type StrategyStatus = 'candidate' | 'watch' | 'champion' | 'retired' | 'paused'
+export type StrategyStatus = 'template' | 'candidate' | 'watch' | 'champion' | 'retired' | 'paused'
 
 export type StrategyHorizon = 'short' | 'mid' | 'long'
 

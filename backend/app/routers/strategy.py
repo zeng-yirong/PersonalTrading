@@ -1,4 +1,4 @@
-"""策略库 API：列表、创建、状态迁移、克隆、单条重跑。"""
+﻿"""策略库 API：列表、创建、状态迁移、克隆、单条重跑。"""
 
 from __future__ import annotations
 
@@ -18,7 +18,9 @@ class CreateModel(BaseModel):
     query: dict[str, Any]
     source: str = "manual"
     notes: str = ""
+    horizon: str = "long"
     params: Optional[dict[str, Any]] = None
+    provenance: Optional[dict[str, Any]] = None
 
 
 class StatusModel(BaseModel):
@@ -33,7 +35,7 @@ async def list_all(
     items = await run_in_threadpool(store.list_strategies, status)
     enriched = await run_in_threadpool(lambda: [store.with_metrics(item) for item in items])
     # 同状态内先按周期分组（短线 → 中线 → 长线），再按近一年超额排。
-    order = {"champion": 0, "watch": 1, "candidate": 2, "paused": 3, "retired": 4}
+    order = {"champion": 0, "watch": 1, "candidate": 2, "template": 3, "paused": 4, "retired": 5}
     horizon_order = {"short": 0, "mid": 1, "long": 2}
     enriched.sort(
         key=lambda item: (
@@ -64,6 +66,8 @@ async def create(payload: CreateModel) -> dict[str, Any]:
                 source=payload.source,
                 params=payload.params,
                 notes=payload.notes,
+                horizon=payload.horizon,
+                provenance=payload.provenance,
             )
         )
     except store.StrategyError as exc:

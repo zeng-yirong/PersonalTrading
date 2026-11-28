@@ -1,4 +1,4 @@
-"""策略库：种子、状态机、成绩读取。"""
+﻿"""策略库：种子、状态机、成绩读取。"""
 
 from __future__ import annotations
 
@@ -15,11 +15,17 @@ def app_db(tmp_path, monkeypatch):
     init_db()
 
 
-def test_presets_are_seeded_as_champions_once(app_db):
-    champions = store.list_strategies("champion")
-    assert len(champions) == 12
-    assert {item["id"] for item in champions} >= {"low-valuation", "high-dividend"}
+def test_presets_are_seeded_as_templates_once(app_db):
+    templates = store.list_strategies("template")
+    assert len(templates) == 12
+    assert {item["id"] for item in templates} >= {"low-valuation", "high-dividend"}
+    # 示例不是 champion：未验证，库里没有正式策略
+    assert store.list_strategies("champion") == []
     assert store.seed_from_presets() == 0          # 幂等
+    # 来源写在 provenance 里：origin=hand、verified=False
+    sample = store.get("low-valuation")
+    assert sample["provenance"]["origin"] == "hand"
+    assert sample["provenance"]["verified"] is False
 
 
 def test_status_upgrade_downgrade_and_retire(app_db):
@@ -45,7 +51,7 @@ def test_status_upgrade_downgrade_and_retire(app_db):
 
 def test_illegal_transitions_are_rejected(app_db):
     with pytest.raises(store.StrategyError):
-        store.set_status("low-valuation", "candidate", "跳过观察期")
+        store.set_status("low-valuation", "champion", "跳过观察期")
     with pytest.raises(store.StrategyError):
         store.set_status("low-valuation", "bogus")
     with pytest.raises(store.StrategyError):
@@ -79,8 +85,8 @@ def test_api_lists_and_rejects_illegal_status(app_db):
 
     listing = asyncio.run(router.list_all(status=""))
     assert listing["count"] == 12
-    # 同状态内按近一年超额排；没有成绩的排在后面
-    assert all(item["status"] == "champion" for item in listing["strategies"])
+    # 12 条都是模板：示例不是正式策略
+    assert all(item["status"] == "template" for item in listing["strategies"])
 
     try:
         asyncio.run(router.change_status("low-valuation", router.StatusModel(status="bogus")))
