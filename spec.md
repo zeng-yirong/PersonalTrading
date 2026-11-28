@@ -30,6 +30,7 @@
 | 2.3 模拟盘 + 复盘 | `paper/service.py`、`paper/review.py`、`fees.py` | `scripts/paper.py` |
 | 2.4 统一决策账本 | `ops/ledger.py`、`routers/ops.py` | `scripts/ops.py ledger` / `chain` |
 | 2.5 置信度校准 | `agents/runner.py`、`db.py`、`ops/ledger.py`、`guards.py` | `/api/ledger/calibration` |
+| 2.6 今日推荐 | 待建：`picks/service.py`、`picks/store.py`、`routers/picks.py` | `/api/picks` |
 | 3.0 技能加载 | `app/skills/`、`agents/runner.py`、`agents/commentary.py` | `pytest`、`commentary` 接口 |
 | 3.0.1 技能进化 | 待建：`scripts/replay.py`、`skill_runs` 表 | 回放 + 配对 bootstrap |
 | 3.1 记忆检索 | `agents/memory.py`、`memory_index` / `memory_fts` | `scripts/memory_eval.py` |
@@ -37,6 +38,7 @@
 | 3.2.1 外部因子导入 | `factor/alpha158.py`、`academic.py`、`gtja.py`、`fundamental.py` | `factor.py --source ... --incremental` |
 | 3.3 策略自进化 | `strategy/store.py`、待建 `strategy/generator.py` | `/api/strategies` |
 | 3.4 策略周期分类 | `strategy/horizon.py`、`backtest/engine.py`（新指标） | `python scripts/preset_backtest.py` |
+| 3.5 策略来源 A–E | 待建 `strategy/generator.py`、`strategies.invalidation` | `python scripts/generate.py --source ...` |
 
 ## 0. 数据资产（L0）
 
@@ -256,6 +258,30 @@
 - fixture 造 12 条已判定样本 → `GET /api/ledger/calibration` 返回 ≥ 3 档，各档 n 之和 = 12，Brier 与基线可比较。
 - 新增 pytest：来源降级、Brier 手算、信心-仓位体检各 1 条。
 
+### 2.6 今日推荐
+
+**实现（待建）**
+
+- **只推荐 champion**：读 `strategies` 表 `status='champion'`，用最近一批 `strategy_runs` 的 1 年 `excess_cagr_pct` 排序，要求 2 年窗口同为正；最多取前 3 个。candidate / watch 一律不进，**没有合格策略就返回空清单 + 原因，不凑数**。
+- **选股**：用策略自己的 `query_json` 跑 `screener/snapshot.py` 的当日快照；按「策略权重（第 1/2/3 名 = 1.0/0.8/0.6）× 策略内排序（有 `sort` 用 `sort`，否则按成交额）」合并去重，最多 10 只；同一策略 ≤4 只、同一行业 ≤3 只。
+- **过滤**：停牌（当日无 K）、ST / *ST、上市 <60 个交易日、20 日均额 <5000 万、次日大概率买不到（今日涨停且换手异常）——最后一种不直接删，标 `chased` 留给复盘区分。
+- **每只输出**：`strategy_id` / `strategy_name`、命中条件、参考入场区间（当日收盘 ±1.5%，次日高开 >3% 标「不追」）、参考仓位（`min(10%, 100 / top_n)`）、失效条件（跌破 MA20 或策略条件失效）、风险点、`as_of`；整份清单标「研究参考，不是买入指令」。
+- **时点与前置检查**：工作日 18:20 作为 `daily_chain.py` 第 4 步（复盘刷新 → 今日复盘 → 自动推演 → 今日推荐）；`daily` 最新日必须 = 当日，否则拒绝生成并写明原因；非交易日不生成，页面展示最近一份并标 `for_date`。
+- **落库**：`daily_picks`（`trade_date`, `for_date`, `strategy_id`, `symbol`, `rank`, `score`, `entry_low`, `entry_high`, `max_position_pct`, `reasons_json`, `invalidation`, `chased`, `created_at`）；`pick_reviews`（`pick_id`, `entry_date`, `entry_price`, `fillable`, `t1_return`, `t1_excess`, `t5_return`, `t5_excess`, `outcome`）。
+- **复盘**：次日**开盘价**入场；一字涨停 / 停牌 / 高开 >3% 记 `fillable=0`，不进命中率；T+1 与 T+5 用复权收盘算相对沪深300 超额；主判定 T+5 超额 >1% 为正确、<-1% 为错误、其余中性。
+- **API / UI**：`GET /api/picks?date=`、`POST /api/picks/generate`、`GET /api/picks/review`；导航新增「今日推荐」，展示清单、来源策略与次日复盘；生成 0 次模型调用（可选点评另算，≤2k tokens 且可关）。
+- **复现**：评分与排序末尾固定 `symbol ASC`；同一份面板 + 同一批 champion 重跑，清单、顺序、仓位完全一致。
+
+**验收**
+
+- `POST /api/picks/generate` 在面板就绪时 ≤2 s，返回 0–10 只；非空时每个 `strategy_id` 都是 champion，且其 1 年、2 年超额年化都 >0。
+- 同一面板连跑三次，清单、顺序、仓位完全一致。
+- 过滤用例各 1 条：停牌、ST、上市第 59 个交易日、20 日均额 4000 万、今日涨停（次日一字）；被过滤的写进 `skipped` 原因。
+- 面板最新日 ≠ 当日时生成失败并返回原因；周末访问显示最近一份且 `for_date` = 下一交易日。
+- 复盘：一字板样本 `fillable=0` 且不进命中率；`GET /api/picks/review` 返回样本数、T+1/T+5 命中率与平均超额，样本 <20 只标「样本不足」。
+- 口径：清单只能引用 `as_of` 及之前的数据，生成时间晚于 `as_of` 收盘；禁止用旧面板推荐明天。
+- 成本：生成 0 tokens；开启点评时 ≤2k tokens，点评失败不影响清单。
+
 ## 3. 进化（L3）
 
 ### 3.0 技能加载
@@ -393,6 +419,103 @@
 - `python scripts/preset_backtest.py`：输出按 horizon 分组，短线策略用 3 日调仓（`avg_holding_days` ≈ 3）。
 - 策略库面板可按周期筛选；分组后组内 <3 条时只展示不排名（人工判读）。
 - 同一策略连跑三次，五个新指标完全一致（`symbol ASC` 兜底）。
+
+### 3.5 策略来源（A–E）
+
+**为什么需要这一节**
+
+策略库的管道已经跑通了（template → candidate → watch → champion，分组参数、门槛、周度排名都在），但库里 `champion = 0`。缺的不是管道，是**候选从哪来**。下面五个来源是允许的入口；除此之外不许直接往库里塞条件（比如"看着像"的随手一写）。
+
+五个来源的统一约束：
+
+- 产出物必须是 `ScreenQuery` + `horizon` + **`invalidation`（失效条件）+ `provenance.origin`**（取值 `hand` / `factor_combo` / `neighbourhood` / `profile` / `theme`）；
+- 都走同一条流水线：分组参数 → 回测（1 年 + 2 年，含费用/涨跌停/T+1）→ `horizon.gate_check` → candidate → 观察 8 周 → champion（人工确认）；
+- **生成类来源（B/C/D/E）不调模型**：必须可复现、可计多重检验（每周生成数记入 `generated_count`，门槛按 N 收紧）；
+- `invalidation` 为空时 `POST /api/strategies` 返回 400——"没有失效条件的策略"等于永远不淘汰。
+
+| 来源 | 一句话 | 实现入口 | 状态 |
+|---|---|---|---|
+| A 人工假设 | 盘面/研报/观察 → 一句可证伪的假设 → 条件 → 回测 | 选股页「存为候选」+ `POST /api/strategies` | 管道有，UI 入口缺 |
+| B 因子组合 | 从已晋级因子里取 2–3 个 + 分位阈值 → 批量生成 | `strategy/generator.py` | 未实现 |
+| C 参数邻域 | 现有策略阈值 ×0.8/×1.2、调仓 3/5/10/20 扫描 | `strategy/generator.py` | 未实现 |
+| D 反向构造 | 回测最好/最差那一期的持仓画像 → 反推条件 | `strategy/generator.py` | 未实现 |
+| E 事件/主题驱动 | 主题报告的行业结论 → 行业约束 + 财务/动量条件 | `topic/` + `strategies` | 未实现 |
+
+#### A. 人工假设（成本最低，现在就能用）
+
+**实现**
+
+- 选股页结果头部加「存为候选策略」：把当前 `query`、`horizon`、`notes`（假设原话）、`invalidation`（失效条件）提交到 `POST /api/strategies`；
+- `strategies.invalidation TEXT` 字段（迁移幂等），策略库表格里展示（hover 或详情）；
+- `provenance = {"origin": "hand", "rationale": "<假设原话>", "verified": false}`。
+
+**验收**
+
+- 从选股条件一键建候选，库里出现 `status=candidate`、`source=hand`、`provenance.origin=hand`；
+- `invalidation` 留空时返回 400 并说明"必须写失效条件"；填了则原样落库并可查；
+- 新建的候选在下一批周度回测里有成绩（不需要等周六，`POST /api/strategies/{id}/run` 即可出 1 年成绩）。
+
+#### B. 因子组合
+
+**实现**
+
+- `strategy/generator.py::from_factors(n)`：从 `factor/promoted.py` 的 7 个晋级因子（`a_vstd_20` / `a_vstd_5` / `a_qtl20_60` / `a_corr_20` / `a_corr_5` / `a_mingap_60` / `a_kbar_kup`）里取 2–3 个；
+- 每个因子按分位切一刀（20/40/60/80），方向按因子在评估里 IC 的符号；再叠一个估值或流动性兜底条件（`pe_ttm` / `amount`），避免选出一堆无法成交的票；
+- 生成数量上限 `n`（默认 10），按条件内容 hash 去重，重复执行不重复入库；
+- `provenance = {"origin": "factor_combo", "factors": [...], "quantiles": [...], "verified": false}`。
+
+**验收**
+
+- `python scripts/generate.py --source factor_combo --n 10`：一次产出 ≤10 个候选，全部自动回测并入库为 `candidate`；
+- 同一命令连跑两次，第二次新增 0 条（hash 去重）；
+- 0 次模型调用（脚本内无 LLM 依赖）；
+- 每个候选的 `provenance.factors` 能指回 `factor/promoted.py` 里的因子名。
+
+#### C. 参数邻域 / 市场状态变体
+
+**实现**
+
+- `neighbourhood(strategy_id)`：对策略每个数值阈值生成 `×0.8` / `×1.2` 两个变体，调仓周期换成 3/5/10/20 中与当前不同的两个；
+- 输出一组"邻域"结果，**不做最优选择**，只回答"这条策略是不是靠在某个点上碰巧正收益"；
+- 稳健标记：5 个邻域点里 ≥4 个同向（超额为正）记为 `steady=True`，否则 `fragile`。
+
+**验收**
+
+- 对任一 champion 生成 5 个邻域变体并全部回测，输出 `steady` / `fragile`；
+- 报告里给出邻域明细（每个变体的超额年化），不只给结论；
+- 结果只影响"是否建议晋级"，不自动改状态。
+
+#### D. 反向构造（画像）
+
+**实现**
+
+- `profile_from_run(strategy_id, best: bool)`：取该策略最好（或最差）的一期的 holdings，统计画像：行业中位数、市值分位、`pe_ttm` 分位、`a_vstd_20` 分位、`ret20` 分位；
+- 把画像写成条件（例如"市值 200–800 亿、PE <30、20 日波动 <0.35、近 20 日涨幅 >5%"），生成候选；
+- 报告里必须带样本数（那一期几只票）与"该期是最好还是最差"。
+
+**验收**
+
+- `python scripts/generate.py --source profile --strategy <id> --best`：产出 1 个候选 + 画像摘要；
+- 样本 <5 只时拒绝生成（"画像不足以支撑条件"）；
+- 生成的候选明确标注"由某一期反推，存在选择性偏差"。
+
+#### E. 事件/主题驱动
+
+**实现**
+
+- 从 `topic_reports` 取最近一份报告里的行业/题材结论（存在 `scope` 里）；
+- 生成条件：行业约束（`industry in (...)`）+ 财务或动量条件（`profit_yoy ≥ x` 或 `ret20 ≥ x`）+ 流动性兜底；
+- `provenance = {"origin": "theme", "report_id": ..., "sector": ...}`。
+
+**验收**
+
+- 从一份主题报告生成 1–3 个候选，条件里能看到行业约束；
+- 报告缺失该行业时明确报"没有可用的行业结论"，不硬凑；
+- 生成的候选在回测里能跑出结果（行业约束不会把股票池筛成空）。
+
+**共同的退出口**
+
+任何来源的候选，最终只由两件事决定生死：**分组门槛（§3.4）+ 观察期（§3.3）**。来源只影响"从哪来"，不影响"能不能留下"。
 
 ## 4. 质量属性
 
