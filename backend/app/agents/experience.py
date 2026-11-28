@@ -47,6 +47,8 @@ _SCHEMA = (
         status TEXT NOT NULL DEFAULT 'candidate',
         status_reason TEXT,
         status_changed_at TEXT,
+        graduated_to TEXT,
+        graduated_at TEXT,
         as_of TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -74,7 +76,7 @@ def ensure_schema() -> None:
         for statement in _SCHEMA:
             conn.execute(statement)
         existing = {row[1] for row in conn.execute("PRAGMA table_info(experiences)")}
-        for column in ("status_reason", "status_changed_at"):
+        for column in ("status_reason", "status_changed_at", "graduated_to", "graduated_at"):
             if column not in existing:
                 conn.execute(f"ALTER TABLE experiences ADD COLUMN {column} TEXT")
 
@@ -199,6 +201,8 @@ def _item(row: Any) -> dict[str, Any]:
         "status_changed_at": (
             row["status_changed_at"] if "status_changed_at" in row.keys() else None
         ),
+        "graduated_to": row["graduated_to"] if "graduated_to" in row.keys() else None,
+        "graduated_at": row["graduated_at"] if "graduated_at" in row.keys() else None,
         "as_of": row["as_of"],
         "evidence_count": len(evidence),
         "can_activate": row["status"] == "candidate" and len(evidence) >= ACTIVE_MIN_EVIDENCE,
@@ -471,6 +475,158 @@ def change_status(
             "SELECT * FROM experiences WHERE id = ?", (int(experience_id),)
         ).fetchone()
     return _item(updated)
+
+
+def graduate(experience_id: int, target: str, reason: str) -> Optional[dict[str, Any]]:
+    """Mark an active card as graduated into a skill / guard, then retire it."""
+    ensure_schema()
+    where = (target or "").strip()
+    note = (reason or "").strip()
+    if not where:
+        raise ValueError("必须写固化目标（skill / guard / manual）")
+    if not note:
+        raise ValueError("固化必须写理由")
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM experiences WHERE id = ?", (int(experience_id),)
+        ).fetchone()
+        if row is None:
+            return None
+        if row["status"] != "active":
+            raise ValueError("只有 active 经验可以固化")
+        conn.execute(
+            "UPDATE experiences SET status = 'retired', graduated_to = ?, graduated_at = ?, "
+            "status_reason = ?, status_changed_at = ?, updated_at = ?, "
+            "version = version + 1 WHERE id = ?",
+            (where, now_iso(), note, now_iso(), now_iso(), int(experience_id)),
+        )
+        updated = conn.execute(
+            "SELECT * FROM experiences WHERE id = ?", (int(experience_id),)
+        ).fetchone()
+    return _item(updated)
+
+
+# ----------------------------------------------------------------- evaluation
+def preflight() -> dict[str, Any]:
+    """Sample counts for the shadow precision / paired evaluation gates."""
+    ensure_schema()
+    with connection() as conn:
+        active = conn.execute(
+            "SELECT COUNT(*) FROM experiences WHERE status = 'active'"
+        ).fetchone()[0]
+        judged = conn.execute(
+            "SELECT COUNT(*) FROM agent_reviews WHERE outcome IS NOT NULL "
+            "AND d20_return IS NOT NULL"
+        ).fetchone()[0]
+        pairable = conn.execute(
+            "SELECT COUNT(*) FROM agent_runs r JOIN agent_reviews v ON v.run_id = r.id "
+            "WHERE r.status IN ('ok', 'partial') AND r.context_json IS NOT NULL "
+            "AND r.as_of IS NOT NULL AND v.d20_return IS NOT NULL"
+        ).fetchone()[0]
+        recalls = conn.execute(
+            "SELECT COUNT(*) FROM experience_recalls WHERE injected = 0"
+        ).fetchone()[0]
+    return {
+        "active_cards": int(active or 0),
+        "judged_runs": int(judged or 0),
+        "pairable_runs": int(pairable or 0),
+        "shadow_recalls": int(recalls or 0),
+        "min_judged": 30,
+        "min_pairable": 30,
+    }
+
+
+def _warning_card(action: dict[str, Any]) -> bool:
+    """Current P8 cards are failure-derived; a hit means the run was wrong."""
+    if not isinstance(action, dict):
+        return True
+    multiplier = _as_float(action.get("position_multiplier"))
+    if multiplier is not None and multiplier < 1:
+        return True
+    if action.get("entry") == "wait_pullback":
+        return True
+    return action.get("min_position_pct") is not None
+
+
+def evaluation(limit: int = 500) -> dict[str, Any]:
+    """Shadow-recall precision: of recalled warnings, how many runs actually failed."""
+    ensure_schema()
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT r.run_id, r.experience_id, r.status, r.score, "
+            "v.outcome, v.d20_return, v.d20_excess, e.lesson, e.action_json "
+            "FROM experience_recalls r JOIN experiences e ON e.id = r.experience_id "
+            "LEFT JOIN agent_reviews v ON v.run_id = r.run_id "
+            "WHERE r.injected = 0 ORDER BY r.id DESC LIMIT ?",
+            (max(1, min(int(limit), 2000)),),
+        ).fetchall()
+        judged_runs = conn.execute(
+            "SELECT COUNT(*) FROM agent_reviews WHERE outcome IS NOT NULL"
+        ).fetchone()[0]
+        runs_with_recall = conn.execute(
+            "SELECT COUNT(DISTINCT run_id) FROM experience_recalls WHERE injected = 0"
+        ).fetchone()[0]
+
+    judged = hits = pending = unknown = 0
+    by_status: dict[str, dict[str, int]] = {}
+    cards: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        outcome = str(row["outcome"] or "")
+        bucket = by_status.setdefault(row["status"], {"recalls": 0, "judged": 0, "hits": 0})
+        bucket["recalls"] += 1
+        card = cards.setdefault(
+            int(row["experience_id"]),
+            {
+                "id": int(row["experience_id"]),
+                "lesson": row["lesson"],
+                "recalls": 0,
+                "judged": 0,
+                "hits": 0,
+            },
+        )
+        card["recalls"] += 1
+        if "正确" not in outcome and "错误" not in outcome:
+            pending += 1
+            continue
+        try:
+            action = json.loads(row["action_json"] or "{}")
+        except (TypeError, ValueError):
+            action = {}
+        if not _warning_card(action):
+            unknown += 1
+            continue
+        judged += 1
+        bucket["judged"] += 1
+        card["judged"] += 1
+        if "错误" in outcome:
+            hits += 1
+            bucket["hits"] += 1
+            card["hits"] += 1
+
+    precision = round(hits / judged * 100, 1) if judged else None
+    coverage = (
+        round(int(runs_with_recall or 0) / int(judged_runs or 1) * 100, 1)
+        if judged_runs
+        else None
+    )
+    for bucket in cards.values():
+        bucket["precision_pct"] = (
+            round(bucket["hits"] / bucket["judged"] * 100, 1) if bucket["judged"] else None
+        )
+    return {
+        "recalls": len(rows),
+        "judged": judged,
+        "hits": hits,
+        "false_alarm": judged - hits,
+        "pending": pending,
+        "unknown": unknown,
+        "precision_pct": precision,
+        "coverage_pct": coverage,
+        "runs_with_recall": int(runs_with_recall or 0),
+        "judged_runs": int(judged_runs or 0),
+        "by_status": by_status,
+        "cards": sorted(cards.values(), key=lambda item: (-item["recalls"], item["id"])),
+    }
 
 
 # --------------------------------------------------------------------- reads

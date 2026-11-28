@@ -271,3 +271,52 @@ def test_render_labels_caps_and_keeps_conflicts(app_db):
     capped = experience.render(many, max_chars=200)
     assert len(capped) <= 200
     assert "【经验（不是事实）】" in capped
+
+
+def test_shadow_precision_and_graduation(app_db):
+    with connection() as conn:
+        for run_id, day in ((1, "2026-11-20"), (2, "2026-11-21"), (3, "2026-11-22")):
+            _seed(
+                conn,
+                run_id,
+                f"60000{run_id}",
+                day,
+                position=30,
+                ret20=-5,
+                outcome="看多/错误",
+                ctx=_context(day),
+            )
+    experience.extract()
+    card = experience.list_experiences()[0]
+    experience.change_status(card["id"], "active", "3 条独立复盘")
+
+    for run_id in (1, 2, 3):
+        experience.shadow_recall(run_id, _context("2026-12-20"))
+
+    payload = experience.evaluation()
+    assert payload["recalls"] == 3
+    assert payload["judged"] == 3
+    assert payload["hits"] == 3
+    assert payload["precision_pct"] == 100.0
+    assert payload["coverage_pct"] == 100.0
+
+    retired = experience.graduate(card["id"], "guard", "连续 5 次验证有效")
+    assert retired is not None
+    assert retired["status"] == "retired"
+    assert retired["graduated_to"] == "guard"
+
+    with connection() as conn:
+        _seed(
+            conn,
+            4,
+            "600519",
+            "2026-11-23",
+            position=0,
+            ret20=4,
+            outcome="空仓/错误",
+            ctx=_context("2026-11-23", index_20d=5.0),
+        )
+    experience.extract()
+    candidate = next(item for item in experience.list_experiences() if item["id"] != card["id"])
+    with pytest.raises(ValueError, match="只有 active"):
+        experience.graduate(candidate["id"], "guard", "x")

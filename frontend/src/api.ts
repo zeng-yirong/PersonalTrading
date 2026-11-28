@@ -6,6 +6,7 @@ import type {
   BacktestRunSummary,
   ChartData,
   ExperienceDetail,
+  ExperienceEvaluation,
   ExperienceItem,
   ExperienceStats,
   FactorMeta,
@@ -257,10 +258,16 @@ export const api = {
   experienceStats: () => request<ExperienceStats>('/experiences/stats'),
   experienceExtract: () => request<{ created: number; merged: number; skipped: number }>('/experiences/extract', { method: 'POST' }),
   experienceDetail: (id: number) => request<ExperienceDetail>(`/experiences/${id}`),
+  experienceEvaluation: () => request<ExperienceEvaluation>('/experiences/evaluation'),
   experienceStatus: (id: number, status: string, reason: string) =>
     request<ExperienceItem>(`/experiences/${id}/status`, {
       method: 'POST',
       body: JSON.stringify({ status, reason }),
+    }),
+  experienceGraduate: (id: number, target: string, reason: string) =>
+    request<ExperienceItem>(`/experiences/${id}/graduate`, {
+      method: 'POST',
+      body: JSON.stringify({ target, reason }),
     }),
   opsRepair: (dataset: string, days = 5) =>
     request<OpsRepair>(

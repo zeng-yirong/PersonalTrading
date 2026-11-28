@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "backend"))
 
 from app.agents import experience  # noqa: E402
+from app.agents import replay  # noqa: E402
 from app.db import init_db  # noqa: E402
 
 
@@ -41,6 +43,17 @@ def main(argv: list[str] | None = None) -> int:
     status.add_argument("--id", type=int, required=True)
     status.add_argument("--status", required=True, choices=["candidate", "active", "retired"])
     status.add_argument("--reason", required=True)
+
+    graduate = sub.add_parser("graduate", help="固化到 skill / guard 后退役")
+    graduate.add_argument("--id", type=int, required=True)
+    graduate.add_argument("--target", required=True)
+    graduate.add_argument("--reason", required=True)
+
+    sub.add_parser("evaluation", help="影子召回精确率")
+    paired = sub.add_parser("paired", help="experience on/off 配对（花钱）")
+    paired.add_argument("--live", action="store_true")
+    paired.add_argument("--limit", type=int, default=30)
+    paired.add_argument("--model", default="")
 
     args = parser.parse_args(argv)
     init_db()
@@ -74,6 +87,43 @@ def main(argv: list[str] | None = None) -> int:
             print("失败：经验卡不存在")
             return 1
         print(f"已更新：{item['status']}｜{item['lesson']}")
+        return 0
+    if args.command == "graduate":
+        try:
+            item = experience.graduate(args.id, args.target, args.reason)
+        except ValueError as exc:
+            print(f"失败：{exc}")
+            return 1
+        if item is None:
+            print("失败：经验卡不存在")
+            return 1
+        print(f"已固化到 {item['graduated_to']} 并退役：{item['lesson']}")
+        return 0
+    if args.command == "evaluation":
+        payload = {
+            "preflight": experience.preflight(),
+            "shadow": experience.evaluation(),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "paired":
+        gate = experience.preflight()
+        print(f"active {gate['active_cards']}｜已判定 {gate['judged_runs']}/30｜"
+              f"可配对 {gate['pairable_runs']}/30｜影子召回 {gate['shadow_recalls']}")
+        if gate["active_cards"] < 1 or gate["judged_runs"] < 30 or gate["pairable_runs"] < 30:
+            print("样本不足：不跑配对，也不下结论。")
+            return 0
+        if not args.live:
+            print("门槛已过；加 --live 会跑 experience on/off（每条约 10 次调用）。")
+            return 0
+        payload = asyncio.run(
+            replay.run_paired(limit=args.limit, model=args.model, layer="experience")
+        )
+        summary = payload["summary"]
+        print(f"配对 {summary['n']} 条｜调用 {payload['calls'].get('calls', 0)} 次")
+        for key in ("brier", "excess"):
+            block = summary[key]
+            print(f"{key}: mean={block['mean']} CI=[{block['low']}, {block['high']}]")
         return 0
     rows = experience.recalls(limit=args.limit, run_id=args.run_id)
     for row in rows:

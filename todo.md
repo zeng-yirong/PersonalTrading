@@ -2,13 +2,13 @@
 
 > 目标在 [goat.md](goat.md)，实现方案与验收标准在 [spec.md](spec.md)；这里是**执行计划**：做什么、按什么顺序、做完怎么算完成。
 > **已完成的东西不在这里重复**——历史见 [CHANGELOG.md](CHANGELOG.md) 与 `git log`。
-> 现状（2026-11-28）：`main` @ `bc0d16d`｜296 测试全绿｜面板 1,346 万根日线 / 44 表｜
+> 现状（2026-11-28）：`main` @ `88371be`｜297 测试全绿｜面板 1,346 万根日线 / 44 表｜
 > 12 个预设已有「近一年 × 超额年化」周度排名（`preset_batches`，每周六 09:00 自动跑）。
 
 ## 0. 完成定义（每个任务都要过这五关）
 
 1. **验收可测**：验收标准从 spec.md 抄，写成能跑的命令或能看的数字。
-2. **测试**：新增用例覆盖边界；`pytest backend/tests -q` 全绿（当前 296）。
+2. **测试**：新增用例覆盖边界；`pytest backend/tests -q` 全绿（当前 297）。
 3. **文档**：README / USAGE 对应章节 + DESIGN 对应功能的设计；改了口径也要同步 DESIGN。
 4. **口径**：无未来函数；缺数据显式声明；百分比 ×100 与面板一致。
 5. **一次独立提交**：`feat|fix|docs(scope): 说明`，能单独回滚。
@@ -189,7 +189,7 @@ UI：策略回测模块新增「策略库」tab（表格 + 状态操作 + 建议
 | P7-4 | **连续错误降权**：取最近 5 条，最近 3 条同标的判定全为「错误」→ 只注入 1 条并加警告；错误条目最多 2 条 | P7-3 | ✅ 2026-11-28：3 连错 → 1 条 + 警告；2 错 1 对 → 不警告 | 0.5 天 |
 | P7-5 | **API / CLI / UI**：`GET /api/memory`、`GET /api/memory/stats`、`POST /api/memory/rebuild`；`scripts/memory.py search/stats/rebuild`；运维面板「记忆」tab | P7-3 | ✅ 2026-11-28：三个端点可用；CLI 可查；运维面板可搜「白酒」 | 1 天 |
 | P7-6 | **配对评测**：`memory_eval.py --paired`，只重跑决策层，on/off 各一遍；方向 Brier、仓位加权超额、bootstrap 95% 区间 | ≥30 上下文 + ≥30 已判定 | ◐ 2026-11-28：`replay.py` + 门槛检查已就绪；真实库 12/30 上下文、0/30 判定 → live 未跑 | 2 天 |
-| P7-7 | **测试与性能**：as-of、窗口、降权、中文检索、主题注入、rebuild、预算；1000 条索引 p95 | 贯穿 | ✅ test_memory 15 + test_replay 4；1000 条 p95 2.6 ms；全量 296 绿 | 0.5 天 |
+| P7-7 | **测试与性能**：as-of、窗口、降权、中文检索、主题注入、rebuild、预算；1000 条索引 p95 | 贯穿 | ✅ test_memory 15 + test_replay 4；1000 条 p95 2.6 ms；全量 297 绿 | 0.5 天 |
 | P7-8 | **文档与口径**：DESIGN 记忆节、USAGE 的 CLI/API/配置、spec 3.1、goat 3.1、CHANGELOG | P7-5 | ✅ DESIGN / USAGE / spec / goat / CHANGELOG 已同步 | 0.5 天 |
 | P7-9（可选） | **同行业补位**：同标的不足 3 条时，取同行业其他标的的结论补 1–2 条，标「同行业对照，不是本股历史」 | — | ✅ 2026-11-28：默认关（`MEMORY_PEER_ENABLED=false`）；打开后 ≤2 条；单测覆盖 | 1 天 |
 
@@ -255,7 +255,7 @@ A 档（P7-0 ~ P7-5、P7-7、P7-8）约 **6.5 天**，可与 P6 并行（不共�
 | P8-0 | **影子召回**：`experiences` / `experience_recalls` 两张表；从 `agent_reviews` 规则抽取（逆风加仓 / 强市空仓 / 超买追多）；推演开始时只记录 `injected=0` | — | ✅ 2026-11-28：`test_experience.py` 5 条；`scripts/experience.py extract/stats/recalls` 可跑；真实库 0 张（T+20 未到） | 1.5 天 |
 | P8-1 | **证据门槛与人工确认**：≥3 条独立证据、`POST /api/experiences/{id}/status`（必须带 reason）、运维「经验」tab、证据明细 | P8-0 | ✅ 2026-11-28：状态机白名单；2 条证据升 active 返回 400；3 条 + reason 才生效；退役后不进召回；8 条测试 | 2 天 |
 | P8-2 | **决策注入**：交易员 / 风控负责人 top 2、≤300 字符、与 3.1 分块、`experience_ids` 落库、冲突卡片同时展示 | P8-1 | ✅ 2026-11-28：active 卡独立注入；报告头「经验 N 条」；3 条测试（render/交易员 prompt/报告头） | 1 天 |
-| P8-3 | **评测与毕业**：影子精确率报表、experience on/off 配对、经验固化为 skill/guard 后退役 | P8-2 + ≥30 判定 | 输出精确率/配对表；至少 1 张卡毕业或退役 | 1.5 天 |
+| P8-3 | **评测与毕业**：影子精确率报表、experience on/off 配对、经验固化为 skill/guard 后退役 | P8-2 + ≥30 判定 | ◐ 2026-11-28：`evaluation()` / `graduate()` / `paired` 已就绪；3 条召回单测 100%；真实库无 active、0 判定 → live 未跑 | 1.5 天 |
 
 ### 4.3 第一版为什么只记录、不注入
 

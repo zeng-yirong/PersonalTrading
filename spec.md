@@ -357,12 +357,13 @@
 
 3.1 是**情景记忆**：这只票上次怎么判断、后来怎样，按 `symbol` 召回。3.1.1 是**经验记忆**：从复盘、策略验证、因子复核里抽出可复用的教训（“这类情形通常错在哪”），**只在作出新决策时召回**；策略验证与因子复核是经验的来源，不是召回入口。3.0 的技能是人写的纪律；经验卡是从结果里长出来的，必须过证据门槛，能降级、能淘汰。
 
-**实现（P8-0 / P8-1 / P8-2 已落地；P8-3 待建）**
+**实现（P8-0 ~ P8-3 已落地；等样本）**
 
 - **P8-0 影子召回**：`agents/experience.py` 建 `experiences` + `experience_recalls`；`extract()` 从已复盘记录按规则抽候选（逆风加仓 / 强市空仓 / 超买追多），按 fingerprint 去重合并证据；`shadow_recall()` 在推演开始时只记录“会召回哪些卡”，`injected=0`，**不改 prompt**。`paper.review.refresh()` 写完复盘自动抽取；API `/api/experiences` 与 `scripts/experience.py` 可查。当前真实库尚未到 T+20，抽取结果为 0 张卡。
 - **P8-1 证据门槛与人工确认**：`change_status()` 白名单（candidate→active/retired、active→candidate/retired、retired→candidate）；升 active 必须 ≥3 条独立证据，任何状态变更必须写 reason；`POST /api/experiences/{id}/status`；运维「经验」tab 可看证据、执行生效/退役；candidate 与 retired 都不进召回。
 - **P8-2 决策注入**：`build_context` 用决策前特征（指数 20 日、RSI、偏离 MA20、行业）召回 active 卡（默认 2 条），存入 `context["experience"]` 与 `experience_ids`；`nodes._make_trader` 与 `_make_risk_manager` 在 3.1 历史结论之后追加独立块「经验（不是事实）」，块 ≤300 字符；报告头显示「经验 N 条」。candidate / retired 不注入；冲突卡同时展示，不静默选一个。
-- **P8-3 待建**：影子精确率报表、experience on/off 配对回放、经验固化为 skill/guard 后退役。
+- **P8-3 评测与毕业**：`experience.evaluation()` 算影子召回精确率 / 覆盖率（只有失败型卡计入命中）；`preflight()` 门槛 ≥30 判定 + ≥30 可配对 + ≥1 张 active；`replay.run_paired(layer="experience")` 固定 3.1 记忆，只切 active 经验做 on/off 配对；`graduate()` 把 active 卡固化到 skill / guard / manual 并退役。API `/evaluation`、`/{id}/graduate`；CLI `evaluation` / `paired` / `graduate`。
+- **P8-3 现状**：工具齐了，但真实库没有 active 卡、T+20 判定为 0，`paired` 会按门槛返回「样本不足」，不调用模型。
 - **数据模型**：`experiences(id, scope, scope_key, source, trigger_json, lesson, action_json, evidence_json, confidence, status, as_of, created_at, updated_at, version)` + `experience_fts`（trigram）。`scope` ∈ market / industry / decision / role；`source` ∈ review / strategy / factor；`status` ∈ candidate / active / retired；`trigger_json` 存**决策时能判定**的条件（市场状态、波动、宽度、行业、持有周期、动作、信心档），`evidence_json` 存 `{kind, ref_id, date, metric}`。
 - **抽取来源**（默认纯规则、0 次模型调用）：
   - `agent_reviews`：目标价无锚、止损过宽、仓位与信心不匹配、逆风加仓、失效条件未执行；按结果对 / 错生成候选。
@@ -385,6 +386,7 @@
 - 造 3 条不同标的、同一失败模式的复盘 → 只生成 1 张候选卡，证据 n=3；n<3 时 `recall()` 返回空。
 - P8-1：2 条证据调 `status=active` 返回 400；3 条 + reason 才 active；无 reason 返回 400；active 退役后 `recall()` 为空。
 - P8-2：active 卡命中时，交易员 / 风控 prompt 出现「经验（不是事实）」块，报告头「经验 N 条」，`context_json.experience_ids` 与块一致；candidate / retired 不出现；块 ≤300 字符。
+- P8-3：3 条召回且对应 run 都判错 → `precision_pct = 100`、`coverage_pct = 100`；非失败型卡不计入命中；`graduate()` 只接受 active，固化后 `retired` 且 `graduated_to` / `graduated_at` 落库；`paired` 在 active=0 或判定 <30 时打印「样本不足」、不调用模型。
 - 证据够 3 条但未人工确认时仍是 candidate，`recall()` 返回空；确认 `active` 后才注入。
 - `POST /api/experiences/extract` 连跑两次：候选数不变、证据数不翻倍（hash 去重）。
 - `as_of` 截止：晚于截止日的证据不进召回；`scope` 过滤不串域（行业卡只进同行业决策，`decision` 卡按条件匹配；`source` 不参与过滤）。

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onActivated, onMounted, ref } from 'vue'
 import { api } from '../api'
-import type { ExperienceDetail, ExperienceItem, ExperienceStats } from '../types'
+import type { ExperienceDetail, ExperienceEvaluation, ExperienceItem, ExperienceStats } from '../types'
 
 const stats = ref<ExperienceStats | null>(null)
+const evaluation = ref<ExperienceEvaluation | null>(null)
 const items = ref<ExperienceItem[]>([])
 const statusFilter = ref('')
 const detail = ref<ExperienceDetail | null>(null)
@@ -30,6 +31,17 @@ function statusText(value: string): string {
   return STATUS_LABELS[value] ?? value
 }
 
+function precisionText(): string {
+  const value = evaluation.value?.shadow.precision_pct
+  return value === null || value === undefined ? '—' : `${value}%`
+}
+
+function coverageText(): string {
+  const shadow = evaluation.value?.shadow
+  if (!shadow || shadow.coverage_pct === null || shadow.coverage_pct === undefined) return '—'
+  return `${shadow.coverage_pct}%（${shadow.runs_with_recall}/${shadow.judged_runs}）`
+}
+
 function scopeText(item: ExperienceItem): string {
   return item.scope_key ? `${item.scope}/${item.scope_key}` : item.scope
 }
@@ -43,12 +55,14 @@ function triggerText(item: ExperienceItem): string {
 async function load() {
   error.value = ''
   try {
-    const [nextStats, nextItems] = await Promise.all([
+    const [nextStats, nextItems, nextEvaluation] = await Promise.all([
       api.experienceStats(),
       api.experiences({ status: statusFilter.value, limit: 100 }),
+      api.experienceEvaluation(),
     ])
     stats.value = nextStats
     items.value = nextItems
+    evaluation.value = nextEvaluation
   } catch (exc) {
     error.value = messageOf(exc)
   }
@@ -105,6 +119,38 @@ async function change(item: ExperienceItem, status: string, action: string) {
   }
 }
 
+async function graduate(item: ExperienceItem) {
+  const target = window.prompt(
+    `把「${item.lesson}」固化到哪里？填 skill / guard / manual`,
+    'guard',
+  )
+  if (target === null) return
+  if (!target.trim()) {
+    error.value = '固化目标必填'
+    return
+  }
+  const reason = window.prompt('固化理由（必填，例如：连续 5 次验证有效）', '')
+  if (reason === null) return
+  if (!reason.trim()) {
+    error.value = '固化必须写理由'
+    return
+  }
+  busy.value = `graduate-${item.id}`
+  error.value = ''
+  try {
+    await api.experienceGraduate(item.id, target.trim(), reason.trim())
+    note.value = `#${item.id} 已固化到 ${target.trim()} 并退役`
+    await load()
+    if (detail.value?.id === item.id) {
+      detail.value = await api.experienceDetail(item.id)
+    }
+  } catch (exc) {
+    error.value = messageOf(exc)
+  } finally {
+    busy.value = ''
+  }
+}
+
 onMounted(load)
 onActivated(load)
 </script>
@@ -126,9 +172,14 @@ onActivated(load)
         <span class="ops-stat-note">只记录，未注入</span>
       </div>
       <div class="ops-stat">
+        <span class="ops-stat-label">召回精确率</span>
+        <strong>{{ precisionText() }}</strong>
+        <span class="ops-stat-note">覆盖 {{ coverageText() }}</span>
+      </div>
+      <div class="ops-stat">
         <span class="ops-stat-label">已注入</span>
         <strong>{{ int(stats.injected_recalls) }}</strong>
-        <span class="ops-stat-note">P8-2 才打开</span>
+        <span class="ops-stat-note">P8-2 起只注入 active</span>
       </div>
       <div class="ops-stat">
         <span class="ops-stat-label">更新</span>
@@ -199,6 +250,15 @@ onActivated(load)
                 退役
               </button>
               <button
+                v-if="item.status === 'active'"
+                type="button"
+                class="btn ghost"
+                :disabled="busy !== ''"
+                @click="graduate(item)"
+              >
+                固化
+              </button>
+              <button
                 v-if="item.status === 'retired'"
                 type="button"
                 class="btn ghost"
@@ -229,6 +289,9 @@ onActivated(load)
       </div>
       <div v-if="detail.status_reason" class="market-card-note">
         状态理由：{{ detail.status_reason }}
+      </div>
+      <div v-if="detail.graduated_to" class="market-card-note">
+        已固化到 {{ detail.graduated_to }}（{{ detail.graduated_at || '—' }}）
       </div>
       <div class="exp-detail-block">
         <div class="ops-block-title">触发条件</div>

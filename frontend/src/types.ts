@@ -1316,6 +1316,8 @@ export interface ExperienceItem {
   status: ExperienceStatus
   status_reason: string | null
   status_changed_at: string | null
+  graduated_to: string | null
+  graduated_at: string | null
   as_of: string | null
   evidence_count: number
   can_activate: boolean
@@ -1354,6 +1356,37 @@ export interface ExperienceStats {
   shadow_recalls: number
   injected_recalls: number
   updated_at: string
+}
+
+export interface ExperienceEvaluation {
+  preflight: {
+    active_cards: number
+    judged_runs: number
+    pairable_runs: number
+    shadow_recalls: number
+    min_judged: number
+    min_pairable: number
+  }
+  shadow: {
+    recalls: number
+    judged: number
+    hits: number
+    false_alarm: number
+    pending: number
+    unknown: number
+    precision_pct: number | null
+    coverage_pct: number | null
+    runs_with_recall: number
+    judged_runs: number
+    cards: Array<{
+      id: number
+      lesson: string
+      recalls: number
+      judged: number
+      hits: number
+      precision_pct: number | null
+    }>
+  }
 }
 
 /** ``POST /ledger/review/refresh``：复盘状态加上本次写入统计。 */

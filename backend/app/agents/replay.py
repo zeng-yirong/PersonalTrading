@@ -17,6 +17,7 @@ from __future__ import annotations
 import random
 from typing import Any, Optional
 
+from app.agents import experience
 from app.agents import memory
 from app.agents import nodes
 from app.agents import store as agent_store
@@ -62,11 +63,14 @@ async def replay_decision(
     state: dict[str, Any],
     memory_items: list[dict[str, Any]],
     client: ChatClient,
+    experience_items: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Run trader → risk (3 personas) → risk manager on a frozen context."""
     context = dict(state["context"])
     context["memory"] = memory_items
     context["memory_ids"] = memory.memory_ids(memory_items)
+    context["experience"] = experience_items or []
+    context["experience_ids"] = experience.ids(context["experience"])
     current: dict[str, Any] = {
         **state,
         "context": context,
@@ -149,11 +153,15 @@ def _interval(values: list[float], seed: int = 7, rounds: int = 2000) -> dict[st
 
 
 async def run_paired(
-    limit: int = 30, model: str = "", client: Optional[ChatClient] = None
+    limit: int = 30,
+    model: str = "",
+    client: Optional[ChatClient] = None,
+    layer: str = "memory",
 ) -> dict[str, Any]:
-    """Replay the decision layer with memory on/off for already-judged runs."""
+    """Replay the decision layer with memory (or experience) on/off."""
     from app.db import connection
 
+    layer = layer if layer in {"memory", "experience"} else "memory"
     with connection() as conn:
         rows = conn.execute(
             "SELECT r.id, v.d20_return, v.d20_excess "
@@ -170,9 +178,18 @@ async def run_paired(
             continue
         symbol = state["symbol"]
         as_of = state["context"].get("as_of")
-        on_items = memory.for_symbol(symbol, as_of=as_of)
-        off = await replay_decision(state, [], client)
-        on = await replay_decision(state, on_items, client)
+        on_memory: list[dict[str, Any]] = []
+        on_experience: list[dict[str, Any]] = []
+        if layer == "experience":
+            fixed_memory = state["context"].get("memory") or []
+            features = experience.features_from_context(state["context"])
+            on_experience = experience.recall(features, as_of=as_of, limit=2)
+            off = await replay_decision(state, fixed_memory, client, [])
+            on = await replay_decision(state, fixed_memory, client, on_experience)
+        else:
+            on_memory = memory.for_symbol(symbol, as_of=as_of)
+            off = await replay_decision(state, [], client, [])
+            on = await replay_decision(state, on_memory, client, [])
 
         def view(result: dict[str, Any]) -> dict[str, Any]:
             verdict = result.get("verdict") or {}
@@ -194,11 +211,13 @@ async def run_paired(
                 "run_id": int(row["id"]),
                 "symbol": symbol,
                 "as_of": as_of,
+                "layer": layer,
                 "d20_return": row["d20_return"],
                 "excess": row["d20_excess"],
                 "on": view(on),
                 "off": view(off),
-                "memory_ids": memory.memory_ids(on_items),
+                "memory_ids": memory.memory_ids(on_memory),
+                "experience_ids": experience.ids(on_experience),
             }
         )
     return {"rows": output, "summary": pair_summary(output), "calls": client.usage.as_dict()}
