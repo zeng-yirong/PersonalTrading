@@ -1,4 +1,4 @@
-"""策略库：实体、状态机、以及"最近一批成绩"的读取。
+﻿"""策略库：实体、状态机、以及"最近一批成绩"的读取。
 
 策略以前只是 `presets.json` 里的常量——不能新增、不能下架、不能留档。这里把它变成
 一张表，并把"每周跑一次"的结果写进 `strategy_runs`（1 年 / 2 年两个窗口各一行）。
@@ -107,6 +107,7 @@ def _row_to_strategy(row: Any) -> dict[str, Any]:
         "retired_at": row["retired_at"],
         "retire_reason": row["retire_reason"],
         "notes": row["notes"],
+        "invalidation": row["invalidation"] if "invalidation" in row.keys() else None,
         "provenance": (
             json.loads(row["provenance_json"])
             if "provenance_json" in row.keys() and row["provenance_json"]
@@ -135,8 +136,8 @@ def list_testable() -> list[dict[str, Any]]:
     """
     with connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM strategies WHERE status IN ('champion', 'template') "
-            "ORDER BY CASE status WHEN 'champion' THEN 0 ELSE 1 END, name"
+            "SELECT * FROM strategies WHERE status IN ('champion', 'watch', 'template') "
+            "ORDER BY CASE status WHEN 'champion' THEN 0 WHEN 'watch' THEN 1 ELSE 2 END, name"
         ).fetchall()
     return [_row_to_strategy(row) for row in rows]
 
@@ -156,6 +157,7 @@ def create(
     horizon: str = "long",
     params: Optional[dict[str, Any]] = None,
     notes: str = "",
+    invalidation: str = "",
     provenance: Optional[dict[str, Any]] = None,
     strategy_id: Optional[str] = None,
 ) -> dict[str, Any]:
@@ -165,8 +167,8 @@ def create(
     with connection() as conn:
         conn.execute(
             "INSERT INTO strategies(id, name, query_json, params_json, source, horizon, status, "
-            "created_at, promoted_at, notes, provenance_json) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "created_at, promoted_at, notes, invalidation, provenance_json) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 identifier,
                 name,
@@ -178,6 +180,7 @@ def create(
                 now_iso(),
                 now_iso() if status == "champion" else None,
                 notes,
+                invalidation,
                 json.dumps(provenance or {"origin": source, "verified": False},
                            ensure_ascii=False),
             ),

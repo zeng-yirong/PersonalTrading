@@ -1,4 +1,4 @@
-﻿# 实现方案与验收标准
+# 实现方案与验收标准
 
 > 目标本身写在 [goat.md](goat.md)——本文件承载**功能设计、实现方案与验收**。
 > 编号与 goat.md 的「目标分层」一一对应（0.x / 1.x / 2.x / 3.x），第 4 节对应「质量属性」。
@@ -445,9 +445,10 @@
 
 **实现**
 
-- 选股页结果头部加「存为候选策略」：把当前 `query`、`horizon`、`notes`（假设原话）、`invalidation`（失效条件）提交到 `POST /api/strategies`；
-- `strategies.invalidation TEXT` 字段（迁移幂等），策略库表格里展示（hover 或详情）；
-- `provenance = {"origin": "hand", "rationale": "<假设原话>", "verified": false}`。
+- `strategies.invalidation TEXT` 字段 + `POST /api/strategies` 强制校验（留空 400）——**已实现**；
+- `scripts/seed_manual_batch.py`：批量录入手写假设（假设 / 条件 / 失效条件），可带 `--backtest` 一次跑完并自动晋级过门槛的——**已实现（2026-11-28 首批 50 条）**；
+- 选股页「存为候选策略」按钮（UI）：把当前 `query`、`horizon`、`notes`（假设原话）、`invalidation`（失效条件）提交到 `POST /api/strategies`——**待做**；
+- `provenance = {"origin": "hand", "rationale": "<假设原话>", "invalidation": "...", "verified": false}`。
 
 **验收**
 

@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS strategies (
     retired_at TEXT,
     retire_reason TEXT,
     notes TEXT,
+    invalidation TEXT,           -- 失效条件：什么情况下停用（人工假设必填）
     provenance_json TEXT         -- 来源：origin / 依据 / 建立时的面板日期
 );
 
@@ -343,6 +344,7 @@ def _migrate(conn) -> None:
         ("paper_positions", "entry_adj", "REAL"),
         ("strategies", "horizon", "TEXT DEFAULT 'long'"),
         ("strategies", "provenance_json", "TEXT"),
+        ("strategies", "invalidation", "TEXT"),
         ("watchlist", "added_trade_date", "TEXT"),
         ("watchlist", "added_close", "REAL"),
         ("watchlist", "added_adj", "REAL"),

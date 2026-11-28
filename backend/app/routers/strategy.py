@@ -18,6 +18,7 @@ class CreateModel(BaseModel):
     query: dict[str, Any]
     source: str = "manual"
     notes: str = ""
+    invalidation: str = ""
     horizon: str = "long"
     params: Optional[dict[str, Any]] = None
     provenance: Optional[dict[str, Any]] = None
@@ -58,6 +59,11 @@ async def detail(strategy_id: str) -> dict[str, Any]:
 
 @router.post("")
 async def create(payload: CreateModel) -> dict[str, Any]:
+    if not (payload.invalidation or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="必须写失效条件（什么情况下停用），否则这条策略永远不会被淘汰",
+        )
     try:
         item = await run_in_threadpool(
             lambda: store.create(
@@ -66,6 +72,7 @@ async def create(payload: CreateModel) -> dict[str, Any]:
                 source=payload.source,
                 params=payload.params,
                 notes=payload.notes,
+                invalidation=payload.invalidation,
                 horizon=payload.horizon,
                 provenance=payload.provenance,
             )

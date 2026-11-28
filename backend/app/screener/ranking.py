@@ -1,4 +1,4 @@
-"""每周把策略库里的 champion 跑一遍（近一年 + 近两年），按超额排序留档。
+﻿"""每周把策略库里的 champion 跑一遍（近一年 + 近两年），按超额排序留档。
 
 两个约束写在代码里：
 
@@ -237,7 +237,7 @@ def describe() -> dict[str, Any]:
     champions = [
         item
         for item in strategy_store.list_strategies("")
-        if item["status"] in {"champion", "template"}
+        if item["status"] in {"champion", "watch", "template"}
     ]
     batch = latest()
     rank_of = {

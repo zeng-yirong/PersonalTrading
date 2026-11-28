@@ -1,4 +1,4 @@
-﻿export type AssetType = 'stock' | 'etf'
+export type AssetType = 'stock' | 'etf'
 
 export interface WatchlistItem {
   symbol: string
@@ -518,6 +518,8 @@ export interface StrategyRow {
   promoted_at?: string | null
   retired_at?: string | null
   retire_reason?: string | null
+  invalidation?: string | null
+  provenance?: { origin?: string; rationale?: string; verified?: boolean; note?: string } | null
   query: ScreenQueryPayload
   params?: Record<string, number>
   horizon?: StrategyHorizon

@@ -143,3 +143,29 @@ def test_seed_keeps_horizon_from_presets(app_db):
     by_id = {item["id"]: item for item in store.list_strategies("")}
     assert by_id["limit-up-pullback"]["horizon"] == "short"
     assert by_id["high-dividend"]["horizon"] == "long"
+
+def test_create_requires_invalidation_via_api(app_db):
+    import asyncio
+
+    import pytest as _pytest
+
+    from app.routers import strategy as router
+
+    query = {"filters": [{"field": "pe_ttm", "op": "<=", "value": 20}]}
+    with _pytest.raises(Exception) as excinfo:
+        asyncio.run(router.create(router.CreateModel(name="无失效条件", query=query)))
+    assert getattr(excinfo.value, "status_code", None) == 400
+
+    created = asyncio.run(
+        router.create(
+            router.CreateModel(
+                name="有失效条件",
+                query=query,
+                horizon="long",
+                invalidation="沪深300 跌破 120 日均线时停用",
+            )
+        )
+    )
+    assert created["status"] == "candidate"
+    assert created["invalidation"].startswith("沪深300")
+    assert created["horizon"] == "long"

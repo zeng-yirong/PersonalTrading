@@ -205,6 +205,14 @@ onMounted(load)
               <div class="sub-meta mono" style="font-size: 11px">
                 {{ row.id }}<span v-if="row.retire_reason">｜{{ row.retire_reason }}</span>
               </div>
+              <div
+                v-if="row.invalidation"
+                class="sub-meta"
+                style="font-size: 11px; max-width: 260px"
+                :title="row.invalidation"
+              >
+                失效：{{ row.invalidation }}
+              </div>
             </td>
             <td>
               <span class="strategy-status" :class="`status-${row.status}`">

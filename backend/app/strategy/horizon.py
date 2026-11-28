@@ -45,7 +45,9 @@ GATES: dict[str, list[dict[str, Any]]] = {
         {"key": "hit_rate_pct", "op": ">=", "value": 45, "label": "胜率 ≥45%"},
     ],
     "long": [
-        {"key": "periods", "op": ">=", "value": 12, "label": "期数 ≥12"},
+        # 1 年 / 20 日调仓最多只有 12 期，要求 12 等于"一期都不许跳"；按 2 年窗口
+        # （24 期）校准后取一半并允许跳 2 期。2 年窗口下仍应 ≥20。
+        {"key": "periods", "op": ">=", "value": 10, "label": "期数 ≥10（1 年窗口）"},
         {"key": "excess_cagr_pct", "op": ">", "value": 0, "label": "超额年化 >0"},
         {"key": "max_drawdown_pct", "op": ">=", "value": -25, "label": "最大回撤 ≥-25%"},
         {"key": "hit_rate_pct", "op": ">=", "value": 50, "label": "胜率 ≥50%"},
