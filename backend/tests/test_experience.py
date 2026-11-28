@@ -247,3 +247,27 @@ def test_details_include_evidence(app_db):
     assert detail["lesson"] == card["lesson"]
     assert detail["evidence"][0]["ref_id"] == 1
     assert detail["evidence"][0]["kind"] == "review"
+
+
+def test_render_labels_caps_and_keeps_conflicts(app_db):
+    cards = [
+        {
+            "id": index,
+            "as_of": "2026-12-18",
+            "evidence_count": 3,
+            "lesson": "逆风期应降仓" if index == 1 else "逆风期可加仓",
+        }
+        for index in (1, 2)
+    ]
+    block = experience.render(cards, max_chars=300)
+    assert block.startswith("【经验（不是事实）】")
+    assert "逆风期应降仓" in block and "逆风期可加仓" in block
+    assert len(block) <= 300
+
+    many = [
+        {"id": i, "as_of": "2026-12-18", "evidence_count": 3, "lesson": "教训" * 60}
+        for i in range(8)
+    ]
+    capped = experience.render(many, max_chars=200)
+    assert len(capped) <= 200
+    assert "【经验（不是事实）】" in capped

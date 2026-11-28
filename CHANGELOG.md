@@ -4,6 +4,7 @@
 
 ## 未发布（v0.10.1）
 
+- 经验记忆 P8-2：active 经验卡注入交易员 / 风控负责人（≤300 字符，独立于 3.1 历史结论），报告头显示「经验 N 条」，`context.experience_ids` 可审计；candidate / retired 不注入，冲突卡同时展示
 - 经验记忆 P8-1：证据门槛 ≥3 + 人工确认/退役（reason 必填）；状态机白名单（candidate/active/retired）；Ops「经验」tab 可看证据并操作；candidate / retired 都不进召回
 - 经验记忆 P8-0（影子召回）：`experiences` / `experience_recalls` 两张表；从复盘规则抽取候选（逆风加仓 / 强市空仓 / 超买追多）；推演开始时只记录“会召回哪些卡”，`injected=0`，不改 prompt；复盘刷新自动抽取；API / CLI 可查。真实库 T+20 未到，暂 0 张卡
 - 记忆检索完整版（P7）：as_of 截止 + 180 天窗口、主题记忆注入、全文检索 API / CLI / 运维「记忆」tab、连续错误降权、900 字符预算、`memory_ids` 审计；`memory_eval --paired` 提供决策层 on/off 配对（门槛 ≥30 上下文 + ≥30 判定，等样本）

@@ -87,6 +87,7 @@ def build_report(state: dict[str, Any], ctx: dict[str, Any], usage: dict[str, in
     risks = state.get("risk_reviews") or []
     errors = state.get("errors") or []
     plan = build_plan(proposal, price.get("last_close"))
+    experience_count = len(ctx.get("experience") or [])
 
     lines = [
         f"# {profile['name']}（{profile['symbol']}）多智能体研究",
@@ -94,7 +95,8 @@ def build_report(state: dict[str, Any], ctx: dict[str, Any], usage: dict[str, in
         f"> 截止 {ctx['as_of']} ｜ 收盘 {_fmt(price['last_close'])} ｜ "
         f"模型 `{state.get('model', '')}` ｜ 辩论 {state.get('rounds', 0)} 轮 ｜ "
         f"调用 {usage.get('calls', 0)} 次 / {usage.get('total_tokens', 0)} tokens"
-        + (f" ｜ 技能 `{state.get('skill_version')}`" if state.get("skill_version") else ""),
+        + (f" ｜ 技能 `{state.get('skill_version')}`" if state.get("skill_version") else "")
+        + (f" ｜ 经验 {experience_count} 条" if experience_count else ""),
         "",
         "## 结论",
         "",

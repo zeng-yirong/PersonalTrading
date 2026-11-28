@@ -258,9 +258,9 @@ stage → run_start → (node_start → node_end) ×N → run_end
 
 这条措辞是必要的：模型很容易把历史价格当今日价格。
 
-### 5.3 经验记忆（P8-0 / P8-1）
+### 5.3 经验记忆（P8-0 / P8-1 / P8-2）
 
-`agents/experience.py` 把复盘里的可复用教训抽成结构化卡片：`scope`（market / industry / decision / role）、`trigger`（决策前可判定的条件）、`lesson`、`action`、`evidence`、`confidence`、`status`。P8-0 只从 `agent_reviews` 抽候选（逆风加仓 / 强市空仓 / 超买追多），按 fingerprint 去重合并证据；推演开始时只写 `experience_recalls`（`injected=0`），**不改 prompt**。P8-1 加证据门槛与人工确认：≥3 条独立证据且写了 reason 才能升 active，退役同样要 reason；candidate / retired 都不进召回。P8-2 才把 active 卡注入交易员 / 风控负责人。
+`agents/experience.py` 把复盘里的可复用教训抽成结构化卡片：`scope`（market / industry / decision / role）、`trigger`（决策前可判定的条件）、`lesson`、`action`、`evidence`、`confidence`、`status`。P8-0 只从 `agent_reviews` 抽候选（逆风加仓 / 强市空仓 / 超买追多），按 fingerprint 去重合并证据；推演开始时只写 `experience_recalls`（`injected=0`）。P8-1 加证据门槛与人工确认：≥3 条独立证据且写了 reason 才能升 active，退役同样要 reason；candidate / retired 都不进召回。P8-2 把 active 卡按决策前特征召回 top 2，作为独立块「经验（不是事实）」注入交易员 / 风控负责人，报告头显示条数；3.1 历史结论与经验记忆分块，互不混用。
 
 ---
 

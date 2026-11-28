@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     memory_peer_enabled: bool = False
     memory_peer_limit: int = 2
 
+    # Experience memory (P8-2): active cards only, small prompt budget.
+    experience_limit: int = 2
+    experience_block_chars: int = 300
+
     http_timeout: float = 12.0
     quote_ttl: int = 5
     kline_ttl: int = 300

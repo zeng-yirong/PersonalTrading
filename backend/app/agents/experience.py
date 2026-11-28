@@ -21,6 +21,7 @@ from datetime import date, datetime
 from typing import Any, Optional
 
 from app.db import connection, now_iso
+from app.config import settings
 
 MAX_EVIDENCE_JSON = 12000
 STATUSES = ("candidate", "active", "retired")
@@ -381,6 +382,31 @@ def recall(
         scored.append(item)
     scored.sort(key=lambda item: (-item["score"], item["as_of"] or "", -item["id"]))
     return scored[: max(1, limit)]
+
+
+EXPERIENCE_LABEL = "经验（不是事实）"
+
+
+def render(items: list[dict[str, Any]], max_chars: Optional[int] = None) -> str:
+    """Prompt block for the decision layer. Empty when there is nothing."""
+    if not items:
+        return ""
+    cap = max(120, int(max_chars or settings.experience_block_chars))
+    lines = [
+        f"【{EXPERIENCE_LABEL}】来自历史复盘，只能对照，不能当作今天的数字或事实："
+    ]
+    for item in items:
+        lines.append(
+            f"- {item.get('as_of') or '—'}｜{item.get('evidence_count') or 0} 次复盘"
+            f"｜{str(item.get('lesson') or '')[:120]}"
+        )
+    while len("\n".join(lines)) > cap and len(lines) > 2:
+        lines.pop()
+    return "\n".join(lines)
+
+
+def ids(items: list[dict[str, Any]]) -> list[str]:
+    return [f"experience:{item['id']}" for item in items]
 
 
 def shadow_recall(run_id: int, ctx: dict[str, Any]) -> int:

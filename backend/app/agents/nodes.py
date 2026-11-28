@@ -12,6 +12,7 @@ import operator
 from typing import Annotated, Any, TypedDict
 
 from app.agents import context as ctxmod
+from app.agents import experience as experience_mod
 from app.agents import memory as memory_mod
 from app.agents import prompts
 from app.agents.llm import ChatClient, LLMError
@@ -206,6 +207,9 @@ def _make_trader(client: ChatClient):
         recalled = memory_mod.render(ctx.get("memory") or [])
         if recalled:
             user = f"{user}\n\n{recalled}"
+        lessons = experience_mod.render(ctx.get("experience") or [])
+        if lessons:
+            user = f"{user}\n\n{lessons}"
         try:
             payload = await client.complete_json(
                 prompts.SYSTEM_TRADER + skills.prompt_suffix("trader"), user, max_tokens=1800
@@ -276,6 +280,9 @@ def _make_risk_manager(client: ChatClient):
         recalled = memory_mod.render(ctx.get("memory") or [])
         if recalled:
             user = f"{user}\n\n{recalled}"
+        lessons = experience_mod.render(ctx.get("experience") or [])
+        if lessons:
+            user = f"{user}\n\n{lessons}"
         try:
             payload = await client.complete_json(
                 prompts.SYSTEM_RISK_MANAGER + skills.prompt_suffix("risk_manager"), user

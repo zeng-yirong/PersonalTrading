@@ -21,7 +21,7 @@ from app.data import store
 from app.services.indicators import compute_all
 from app.services.symbols import normalize_code
 
-from app.agents import context_events, context_market, memory
+from app.agents import context_events, context_market, experience, memory
 
 BENCHMARKS = (("000300.SH", "沪深300"), ("000001.SH", "上证指数"))
 
@@ -132,6 +132,23 @@ def build_context(symbol: str, *, bars: int = 250) -> dict[str, Any]:
         except Exception:  # noqa: BLE001 - 面板/行业缺失时不影响主记忆
             pass
 
+    regime = context_market.build_market_regime()
+    try:
+        features = experience.features_from_context(
+            {
+                "market": market,
+                "regime": regime,
+                "technical": technical,
+                "price": price,
+                "profile": profile,
+            }
+        )
+        experience_items = experience.recall(
+            features, as_of=as_of_text, limit=settings.experience_limit
+        )
+    except Exception:  # noqa: BLE001 - 经验召回失败不该挡住推演
+        experience_items = []
+
     return {
         "symbol": code,
         "profile": profile,
@@ -142,12 +159,14 @@ def build_context(symbol: str, *, bars: int = 250) -> dict[str, Any]:
         "flow": flow,
         "sentiment": sentiment,
         "market": market,
-        "regime": context_market.build_market_regime(),
+        "regime": regime,
         "sector": context_market.build_sector(profile["industry"], code),
         "events": context_events.build_events(ts_code),
         "attention": context_events.build_attention(ts_code, code),
         "memory": memory_items,
         "memory_ids": memory.memory_ids(memory_items),
+        "experience": experience_items,
+        "experience_ids": experience.ids(experience_items),
         "as_of": _iso(end),
     }
 

@@ -43,6 +43,7 @@ class FakeClient:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.model = "fake-model"
+        self.last_user = ""
 
     async def complete_json(
         self,
@@ -53,6 +54,7 @@ class FakeClient:
         temperature: Optional[float] = None,
     ) -> dict[str, Any]:
         self.calls.append(system[:40])
+        self.last_user = user
         if system == prompts.SYSTEM_FUNDAMENTAL:
             return {"stance": "中性", "score": 5, "confidence": 60, "summary": "基本面无明显方向",
                     "key_points": ["ROE 10%"], "risks": ["估值偏高"], "data_gaps": []}
@@ -284,6 +286,67 @@ def test_report_survives_missing_payloads():
     report = build_report(state, _fake_context(), {"calls": 0, "total_tokens": 0})
     assert "## 运行异常" in report
     assert "fundamental: boom" in report
+
+
+def test_trader_prompt_carries_experience_block():
+    from app.agents import nodes
+
+    ctx = _fake_context()
+    ctx["experience"] = [
+        {
+            "id": 7,
+            "as_of": "2026-12-18",
+            "evidence_count": 3,
+            "lesson": "弱市里逆势批准正仓位，事后错误率偏高",
+        }
+    ]
+    client = FakeClient()
+    state = {
+        "context": ctx,
+        "analyses": {},
+        "debate": [],
+        "consensus": {"verdict": "偏多", "leaning_score": 20, "reasoning": "r"},
+        "errors": [],
+    }
+    asyncio.run(nodes._make_trader(client)(state))
+    assert "【经验（不是事实）】" in client.last_user
+    assert "3 次复盘" in client.last_user
+
+
+def test_risk_manager_prompt_carries_experience_block():
+    from app.agents import nodes
+
+    ctx = _fake_context()
+    ctx["experience"] = [
+        {
+            "id": 9,
+            "as_of": "2026-12-18",
+            "evidence_count": 4,
+            "lesson": "逆风期仓位应降一档",
+        }
+    ]
+    client = FakeClient()
+    state = {
+        "context": ctx,
+        "proposal": {"action": "持有", "position_pct": 30, "conviction": 55},
+        "risk_reviews": [],
+        "consensus": {"verdict": "偏多", "leaning_score": 20},
+    }
+    asyncio.run(nodes._make_risk_manager(client)(state))
+    assert "【经验（不是事实）】" in client.last_user
+    assert "逆风期仓位应降一档" in client.last_user
+
+
+def test_report_header_counts_experience():
+    ctx = _fake_context()
+    ctx["experience"] = [{"id": 1, "as_of": "2026-12-18", "lesson": "x"}]
+    state = {
+        "symbol": "600519", "name": "贵州茅台", "rounds": 1, "model": "m",
+        "analyses": {}, "debate": [], "consensus": {}, "proposal": {},
+        "risk_reviews": [], "verdict": {}, "errors": [],
+    }
+    report = build_report(state, ctx, {"calls": 0, "total_tokens": 0})
+    assert "经验 1 条" in report
 
 
 # ------------------------------------------------------------------ llm bits
