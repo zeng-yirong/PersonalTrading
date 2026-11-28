@@ -1,4 +1,4 @@
-# 实现方案与验收标准
+﻿# 实现方案与验收标准
 
 > 目标本身写在 [goat.md](goat.md)——本文件承载**功能设计、实现方案与验收**。
 > 编号与 goat.md 的「目标分层」一一对应（0.x / 1.x / 2.x / 3.x），第 4 节对应「质量属性」。
@@ -507,6 +507,7 @@
 
 - 从选股条件一键建候选，库里出现 `status=candidate`、`source=hand`、`provenance.origin=hand`；
 - `invalidation` 留空时返回 400 并说明"必须写失效条件"；填了则原样落库并可查；
+- `python scripts/retire_batch.py --horizon short --dry-run` 先列出会淘汰谁，去掉 `--dry-run` 后逐条写 `retire_reason` 留档；`watch` / `champion` 默认不动（要 `--force`）；
 - 新建的候选在下一批周度回测里有成绩（不需要等周六，`POST /api/strategies/{id}/run` 即可出 1 年成绩）。
 
 #### B. 因子组合
