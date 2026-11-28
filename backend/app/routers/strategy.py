@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
+from app.config import settings
 from app.strategy import store
 
 router = APIRouter(prefix="/api/strategies", tags=["strategies"])
@@ -46,7 +47,11 @@ async def list_all(
             item["name"],
         )
     )
-    return {"count": len(enriched), "strategies": enriched}
+    return {
+        "count": len(enriched),
+        "strategies": enriched,
+        "retire_enabled": settings.strategy_retire_enabled,
+    }
 
 
 @router.get("/{strategy_id}")
@@ -84,6 +89,12 @@ async def create(payload: CreateModel) -> dict[str, Any]:
 
 @router.post("/{strategy_id}/status")
 async def change_status(strategy_id: str, payload: StatusModel) -> dict[str, Any]:
+    if payload.status == "retired" and not settings.strategy_retire_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="策略淘汰功能默认关闭（STRATEGY_RETIRE_ENABLED=false）；"
+            "恢复（retired → candidate）不受影响",
+        )
     try:
         item = await run_in_threadpool(
             lambda: store.set_status(strategy_id, payload.status, payload.reason)

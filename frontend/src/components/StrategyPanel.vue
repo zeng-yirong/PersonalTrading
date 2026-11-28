@@ -4,6 +4,7 @@ import type { ScreenQueryPayload, StockContextPayload } from '../types'
 import BacktestSection from './BacktestSection.vue'
 import ScreenPanel from './ScreenPanel.vue'
 import StrategyLibrary from './StrategyLibrary.vue'
+import PortfolioPanel from './PortfolioPanel.vue'
 
 /**
  * 「策略」模块 = 选股 + 回测，共用同一份条件。
@@ -14,7 +15,7 @@ import StrategyLibrary from './StrategyLibrary.vue'
  *
  * 两块都用 v-show 而不是 v-if：切回来时筛选结果和回测参数都还在。
  */
-const tab = ref<'screen' | 'backtest' | 'library'>('screen')
+const tab = ref<'screen' | 'backtest' | 'library' | 'portfolio'>('screen')
 const backtest = ref<InstanceType<typeof BacktestSection> | null>(null)
 const json = ref('')
 const jsonNote = ref('')
@@ -52,7 +53,7 @@ async function runFromJson() {
   jsonNote.value = '已按粘贴的条件回测'
 }
 
-async function switchTab(next: 'screen' | 'backtest' | 'library') {
+async function switchTab(next: 'screen' | 'backtest' | 'library' | 'portfolio') {
   tab.value = next
   await nextTick()
 }
@@ -85,9 +86,21 @@ async function switchTab(next: 'screen' | 'backtest' | 'library') {
       >
         策略库
       </button>
+      <button
+        type="button"
+        class="strategy-tab"
+        :class="{ active: tab === 'portfolio' }"
+        @click="switchTab('portfolio')"
+      >
+        组合（占位）
+      </button>
       <span class="sub-meta" style="margin-left: 8px">
         同一份条件：上面筛出来的东西，下面原样跑一遍历史
       </span>
+    </div>
+
+    <div v-show="tab === 'portfolio'">
+      <PortfolioPanel />
     </div>
 
     <div v-show="tab === 'library'">

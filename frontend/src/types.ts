@@ -533,6 +533,8 @@ export interface StrategyRow {
 export interface StrategyList {
   count: number
   strategies: StrategyRow[]
+  /** 淘汰功能默认关闭；为 false 时前端禁用「淘汰」按钮。 */
+  retire_enabled?: boolean
 }
 
 export interface PresetPayload {

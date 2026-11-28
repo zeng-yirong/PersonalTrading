@@ -1,4 +1,4 @@
-"""批量淘汰策略：把"明确没戏"的从库里下架（不删除，标 retired + 理由）。
+﻿"""批量淘汰策略：把"明确没戏"的从库里下架（不删除，标 retired + 理由）。
 
     python scripts/retire_batch.py --horizon short --status candidate --reason "短线组费用后无 edge"
     python scripts/retire_batch.py --ids a13-pe-percentile,a33-low-launch --reason "条件选不出票"
@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "backend"))
 
 from app.db import init_db  # noqa: E402
+from app.config import settings  # noqa: E402
 from app.strategy import store  # noqa: E402
 
 
@@ -45,10 +46,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true", help="允许淘汰 watch / champion")
     parser.add_argument("--dry-run", action="store_true", help="只看会动谁")
     parser.add_argument("--restore", action="store_true", help="把淘汰的恢复为候选（默认扫 retired）")
+    parser.add_argument("--enable", action="store_true", help="淘汰功能默认关闭，显式打开才执行")
     args = parser.parse_args(argv)
 
     if not args.reason.strip() and not args.dry_run:
         raise SystemExit("必须给 --reason：淘汰理由会留在库里，半年后靠它才知道为什么下架")
+
+    if not args.restore and not args.enable and not settings.strategy_retire_enabled:
+        raise SystemExit(
+            "淘汰功能默认关闭（STRATEGY_RETIRE_ENABLED=false）。"
+            "确认要淘汰时加 --enable，或在 .env 里打开开关"
+        )
 
     init_db()
     if args.restore and args.status == "candidate":

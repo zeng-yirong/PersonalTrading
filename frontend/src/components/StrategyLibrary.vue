@@ -15,6 +15,7 @@ const loading = ref(false)
 const error = ref('')
 const note = ref('')
 const busy = ref('')
+const retireEnabled = ref(true)          // 淘汰默认关闭，由后端 retire_enabled 决定
 const group = ref<'all' | 'short' | 'mid' | 'long'>('all')
 
 const HORIZON_TEXT: Record<string, string> = { short: '短线', mid: '中线', long: '长线' }
@@ -50,6 +51,7 @@ async function load() {
   try {
     const data = await api.strategies()
     rows.value = data.strategies
+    retireEnabled.value = data.retire_enabled !== false
   } catch (exc) {
     error.value = `策略库加载失败：${exc instanceof Error ? exc.message : String(exc)}`
   } finally {
@@ -256,7 +258,8 @@ onMounted(load)
               <button
                 type="button"
                 class="chip"
-                :disabled="busy === row.id || !canRetire(row)"
+                :disabled="busy === row.id || !canRetire(row) || !retireEnabled"
+                :title="retireEnabled ? '淘汰（需写理由）' : '淘汰功能默认关闭，需要时打开 STRATEGY_RETIRE_ENABLED'"
                 @click="move(row, 'retired')"
               >
                 淘汰
@@ -278,7 +281,7 @@ onMounted(load)
 
     <div class="sub-meta" style="margin-top: 8px">
       近一年 / 近二年都以沪深300 为基准比超额；最近 4 周趋势是每周全量回测的超额年化（旧 → 新）。
-      排名不自动改状态：升级要观察期、淘汰要留理由。
+      排名不自动改状态：升级要观察期；淘汰默认关闭（需要时在 .env 打开 STRATEGY_RETIRE_ENABLED），开启后淘汰要留理由。
     </div>
   </section>
 </template>

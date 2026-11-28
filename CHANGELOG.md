@@ -18,6 +18,7 @@
 - 预设策略结构化落库（`presets.json`），每周六全量回测并按超额年化重排（`preset_batches`）
 - 策略库（P6-0/P6-1）：`strategies` + `strategy_runs` 两张表、状态机（候选/观察/正式/淘汰）、策略库面板（近一年 / 近二年 / 4 周趋势 / 复核日 / 升降级·淘汰·克隆）；周度任务改跑 1 年 + 2 年两个窗口
 - 修复回测不可复现：ORDER BY 末尾补 `symbol ASC`（并列值原先由 DuckDB 任意排序，同一面板两次跑出 -53.21% / -53.48%）
+- 策略淘汰默认关闭（`STRATEGY_RETIRE_ENABLED=false`）：API 403、`retire_batch.py` 需 `--enable`，恢复不受影响；策略组合先占位（「组合（占位）」tab + todo P9）
 - 批量淘汰：`scripts/retire_batch.py`（按周期/状态/id，必须带理由，watch/champion 需 --force）；首轮下架 12 条（短线 10 条全亏 + 2 条无有效结果）
 - P6-8 来源 A 落地：`strategies.invalidation`（留空 400）+ `scripts/seed_manual_batch.py` 首批 50 条手写假设（假设 / 条件 / 失效条件），`--backtest` 一次跑完并自动晋级；长线门槛「期数 ≥12」在 1 年窗口下不可能满足（最多 12 期），改为 ≥10（按 2 年窗口 24 期校准），并加 `--recheck` 只重算门槛不重跑
 - 文档：spec.md 新增 §3.5「策略来源 A–E」（人工假设 / 因子组合 / 参数邻域 / 反向构造 / 主题驱动，统一要求失效条件与 provenance），todo 新增 P6-8~P6-12 与「失效条件」决策点

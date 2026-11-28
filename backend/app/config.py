@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     memory_peer_enabled: bool = False
     memory_peer_limit: int = 2
 
+    # 策略淘汰开关：先默认关闭。关闭时 API 拒绝把策略改成 retired、
+    # retire_batch.py 也拒绝执行；恢复（retired → candidate）始终允许。
+    strategy_retire_enabled: bool = False
+
     # Experience memory (P8-2): active cards only, small prompt budget.
     experience_limit: int = 2
     experience_block_chars: int = 300

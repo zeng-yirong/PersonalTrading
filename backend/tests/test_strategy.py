@@ -176,3 +176,45 @@ def test_retired_can_be_restored_to_candidate(app_db):
     restored = store.set_status("low-valuation", "candidate", "回退：参数分类有误")
     assert restored["status"] == "candidate"
     assert restored["retire_reason"] == "测试淘汰"     # 历史留在库里
+
+def test_retire_is_disabled_by_default(app_db):
+    """淘汰默认关闭：API 返回 403，恢复不受影响。"""
+    import asyncio
+
+    import pytest as _pytest
+
+    from app.config import settings
+    from app.routers import strategy as router
+
+    assert settings.strategy_retire_enabled is False
+
+    with _pytest.raises(Exception) as excinfo:
+        asyncio.run(
+            router.change_status(
+                "low-valuation", router.StatusModel(status="retired", reason="想淘汰")
+            )
+        )
+    assert getattr(excinfo.value, "status_code", None) == 403
+
+    # 升级 / 降级不受开关影响
+    promoted = asyncio.run(
+        router.change_status(
+            "low-valuation", router.StatusModel(status="candidate", reason="转候选")
+        )
+    )
+    assert promoted["status"] == "candidate"
+
+
+def test_retire_allowed_when_flag_on(app_db, monkeypatch):
+    import asyncio
+
+    from app.config import settings
+    from app.routers import strategy as router
+
+    monkeypatch.setattr(settings, "strategy_retire_enabled", True)
+    retired = asyncio.run(
+        router.change_status(
+            "low-valuation", router.StatusModel(status="retired", reason="开关打开后淘汰")
+        )
+    )
+    assert retired["status"] == "retired"
