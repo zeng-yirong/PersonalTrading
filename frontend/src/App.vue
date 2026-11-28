@@ -4,7 +4,6 @@ import { api } from './api'
 import { applyTheme, readTheme } from './theme'
 import type {
   MarketOverview,
-  Meta,
   ResearchNote,
   SearchResult,
   SectionKey,
@@ -34,7 +33,6 @@ const detailKind = ref<'stock' | 'index'>('stock')
 const currentSymbol = ref<string | null>(null)
 const currentName = ref('')
 
-const meta = ref<Meta | null>(null)
 const watchlist = ref<WatchlistItem[]>([])
 const overview = ref<MarketOverview | null>(null)
 const overviewLoading = ref(false)
@@ -102,14 +100,6 @@ const menuWatching = computed(() => {
   if (!menu.open) return false
   return watchlist.value.some((item) => bareSymbol(item.symbol) === menu.symbol)
 })
-
-async function loadMeta() {
-  try {
-    meta.value = await api.meta()
-  } catch {
-    meta.value = null
-  }
-}
 
 async function loadWatchlist() {
   try {
@@ -353,7 +343,6 @@ function onResize() {
 }
 
 onMounted(() => {
-  void loadMeta()
   void loadWatchlist()
   void loadOverview()
   window.addEventListener('keydown', onKeydown)
@@ -453,9 +442,7 @@ onBeforeUnmount(() => {
         />
 
         <footer class="footer">
-          {{ meta?.disclaimer || '目标价与操作建议为模型推算，不保证准确；仅供个人研究使用。' }}
-          数据来自新浪财经 / 东方财富公开接口，可能存在延迟或缺失。
-          <span v-if="meta"> · 模型 {{ meta.model }} · {{ meta.llm_configured ? '已配置' : '未配置' }}</span>
+          目标价、期望收益与买卖动作均为模型推算，不保证准确；仅供个人研究使用，据此操作风险自担
         </footer>
       </main>
     </div>

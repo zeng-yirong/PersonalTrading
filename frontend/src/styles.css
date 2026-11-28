@@ -240,7 +240,7 @@ button {
 }
 
 .watch-item .name {
-  font-weight: 550;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -256,10 +256,10 @@ button {
 .watch-table-head,
 .watch-item.watch-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) 72px 72px 72px 84px 26px;
+  grid-template-columns: minmax(150px, 1fr) 80px 80px 80px 92px 26px;
   align-items: center;
-  gap: 10px;
-  min-width: 540px;
+  gap: 12px;
+  min-width: 560px;
 }
 
 .watch-table-head {
@@ -275,8 +275,15 @@ button {
   white-space: nowrap;
 }
 
+.watch-row .num {
+  font-size: 13px;
+}
+
+/* 现价不再继承行情头的 30px：与同一行的涨跌幅保持同一字号体系 */
 .watch-row .price {
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.3;
 }
 
 .watch-row .code .badge {
@@ -2460,7 +2467,8 @@ details.note summary {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 860px;
+  max-width: 700px;
+  margin: 0 auto; /* 居中：此前贴着内容区左侧，右侧留大片空白 */
 }
 
 .watch-panel .watchlist {
