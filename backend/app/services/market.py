@@ -52,9 +52,16 @@ async def _throttle() -> None:
         _last_request_at = time.monotonic()
 
 
-async def _get_text(url: str, headers: dict[str, str], encoding: str = "utf-8") -> str:
+async def _get_text(
+    url: str,
+    headers: dict[str, str],
+    encoding: str = "utf-8",
+    timeout: Optional[float] = None,
+) -> str:
     await _throttle()
-    async with httpx.AsyncClient(timeout=settings.http_timeout, follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        timeout=timeout or settings.http_timeout, follow_redirects=True
+    ) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()
         if encoding.lower() in {"gbk", "gb2312"}:
@@ -119,6 +126,21 @@ async def _sina_quote(code: str) -> Optional[dict[str, Any]]:
     return _parse_sina_quote(code, match.group(2))
 
 
+async def _sina_quotes(codes: list[str]) -> dict[str, dict[str, Any]]:
+    """One Sina request for many symbols (the watchlist path)."""
+    listing = ",".join(sina_symbol(code) for code in codes)
+    text = await _get_text(
+        f"https://hq.sinajs.cn/list={listing}", SINA_HEADERS, "gbk", timeout=3.0
+    )
+    found: dict[str, dict[str, Any]] = {}
+    for sina_code, payload in _SINA_LINE.findall(text):
+        code = sina_code[2:]
+        quote = _parse_sina_quote(code, payload)
+        if quote:
+            found[code] = quote
+    return found
+
+
 async def _eastmoney_quote(code: str) -> Optional[dict[str, Any]]:
     url = (
         "https://push2.eastmoney.com/api/qt/stock/get"
@@ -181,6 +203,40 @@ async def get_quote(symbol: str) -> dict[str, Any]:
         except Exception as exc:
             errors.append(f"{loader.__name__}: {exc}")
     raise MarketDataError("实时行情获取失败：" + "；".join(errors))
+
+
+async def get_quotes(codes: list[str]) -> dict[str, dict[str, Any]]:
+    """批量行情：一次 Sina 请求取一屏自选，取不到的交给面板兜底。
+
+    刻意不做逐只重试：Sina 批量接口失败时，逐只请求会把一次 3 秒的超时放大成
+    N × 12 秒，而面板里本来就有上一次收盘价与涨跌幅可用。
+    """
+    wanted: list[str] = []
+    for raw in codes:
+        code = normalize_code(raw)
+        if code and code not in wanted:
+            wanted.append(code)
+
+    now = time.time()
+    result: dict[str, dict[str, Any]] = {}
+    missing: list[str] = []
+    for code in wanted:
+        cached = _quote_cache.get(code)
+        if cached and now - cached[0] < settings.quote_ttl:
+            result[code] = cached[1]
+        else:
+            missing.append(code)
+
+    for start in range(0, len(missing), 50):
+        chunk = missing[start : start + 50]
+        try:
+            fetched = await _sina_quotes(chunk)
+        except Exception:
+            fetched = {}
+        for code, quote in fetched.items():
+            _quote_cache[code] = (time.time(), quote)
+            result[code] = quote
+    return result
 
 
 async def get_valuation(symbol: str) -> dict[str, Any]:

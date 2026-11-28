@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api'
 import type {
@@ -161,6 +161,13 @@ onMounted(async () => {
   }
 })
 
+const HORIZON_TEXT: Record<string, string> = { short: '短线', mid: '中线', long: '长线' }
+const HORIZON_ORDER: Record<string, number> = { short: 0, mid: 1, long: 2 }
+
+function horizonText(value?: string): string {
+  return HORIZON_TEXT[value || 'long'] || '—'
+}
+
 /** 表格里的百分比：null 显示 —，0 位小数用于胜率/仓位。 */
 function pct(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined) return '—'
@@ -215,6 +222,7 @@ function pct(value: number | null | undefined, digits = 2): string {
           <thead>
             <tr>
               <th>#</th>
+              <th>周期</th>
               <th>预设</th>
               <th>区间收益</th>
               <th>年化</th>
@@ -227,6 +235,7 @@ function pct(value: number | null | undefined, digits = 2): string {
           <tbody>
             <tr v-for="row in batch.rows" :key="row.id">
               <td class="mono">{{ row.rank }}</td>
+              <td class="mono" style="font-size: 11px">{{ horizonText(row.horizon) }}</td>
               <td>
                 <button type="button" class="link-btn" @click="run(row.text)">{{ row.label }}</button>
               </td>

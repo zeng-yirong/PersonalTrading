@@ -252,6 +252,38 @@ button {
   margin-top: 2px;
 }
 
+/* 自选行情表：名称/代码 + 现价 + 今日 + 近5日 + 自添加 + 移除 */
+.watch-table-head,
+.watch-item.watch-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 72px 72px 72px 84px 26px;
+  align-items: center;
+  gap: 10px;
+  min-width: 540px;
+}
+
+.watch-table-head {
+  padding: 2px 10px 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.watch-table-head .num,
+.watch-row .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.watch-row .price {
+  font-weight: 600;
+}
+
+.watch-row .code .badge {
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
 .icon-btn {
   border: none;
   background: transparent;
@@ -3803,3 +3835,13 @@ details.note summary {
 .status-candidate { color: var(--muted); }
 .status-retired { color: var(--up, #ff5d5d); opacity: 0.8; }
 .status-paused { color: var(--muted); }
+/* ---------- 策略库：周期徽标 ---------- */
+.strategy-horizon {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+}

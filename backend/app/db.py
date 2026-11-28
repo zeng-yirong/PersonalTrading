@@ -19,7 +19,11 @@ CREATE TABLE IF NOT EXISTS watchlist (
     symbol TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     asset_type TEXT NOT NULL DEFAULT 'stock',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    added_trade_date TEXT,
+    added_close REAL,
+    added_adj REAL,
+    added_source TEXT
 );
 
 CREATE TABLE IF NOT EXISTS intraday_cache (
@@ -172,6 +176,7 @@ CREATE TABLE IF NOT EXISTS strategies (
     query_json TEXT NOT NULL,
     params_json TEXT,
     source TEXT,                 -- preset | factor_combo | neighbourhood | template | manual
+    horizon TEXT NOT NULL DEFAULT 'long',   -- short | mid | long（决定参数与门槛）
     status TEXT NOT NULL,        -- candidate | watch | champion | retired | paused
     created_at TEXT NOT NULL,
     promoted_at TEXT,
@@ -333,6 +338,11 @@ def _migrate(conn) -> None:
         ("topic_reports", "source_run_id", "INTEGER"),
         ("agent_runs", "skill_version", "TEXT"),
         ("paper_positions", "entry_adj", "REAL"),
+        ("strategies", "horizon", "TEXT DEFAULT 'long'"),
+        ("watchlist", "added_trade_date", "TEXT"),
+        ("watchlist", "added_close", "REAL"),
+        ("watchlist", "added_adj", "REAL"),
+        ("watchlist", "added_source", "TEXT"),
     )
     for table, column, kind in migrations:
         existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
@@ -348,27 +358,70 @@ def now_iso() -> str:
 def list_watchlist() -> list[dict[str, Any]]:
     with connection() as conn:
         rows = conn.execute(
-            "SELECT symbol, name, asset_type, created_at FROM watchlist "
+            "SELECT symbol, name, asset_type, created_at, added_trade_date, "
+            "added_close, added_adj, added_source FROM watchlist "
             "ORDER BY created_at ASC"
         ).fetchall()
         return [dict(row) for row in rows]
 
 
-def add_watchlist(symbol: str, name: str, asset_type: str) -> dict[str, Any]:
+def add_watchlist(
+    symbol: str,
+    name: str,
+    asset_type: str,
+    added_trade_date: Optional[str] = None,
+    added_close: Optional[float] = None,
+    added_adj: Optional[float] = None,
+    added_source: Optional[str] = None,
+) -> dict[str, Any]:
     with connection() as conn:
         conn.execute(
-            "INSERT INTO watchlist(symbol, name, asset_type, created_at) "
-            "VALUES(?, ?, ?, ?) "
+            "INSERT INTO watchlist(symbol, name, asset_type, created_at, "
+            "added_trade_date, added_close, added_adj, added_source) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(symbol) DO UPDATE SET name=excluded.name, "
-            "asset_type=excluded.asset_type",
-            (symbol, name, asset_type, now_iso()),
+            "asset_type=excluded.asset_type, "
+            "added_trade_date=COALESCE(added_trade_date, excluded.added_trade_date), "
+            "added_close=COALESCE(added_close, excluded.added_close), "
+            "added_adj=COALESCE(added_adj, excluded.added_adj), "
+            "added_source=COALESCE(added_source, excluded.added_source)",
+            (
+                symbol,
+                name,
+                asset_type,
+                now_iso(),
+                added_trade_date,
+                added_close,
+                added_adj,
+                added_source,
+            ),
         )
     item = {
         "symbol": symbol,
         "name": name,
         "asset_type": asset_type,
+        "added_trade_date": added_trade_date,
+        "added_close": added_close,
+        "added_adj": added_adj,
+        "added_source": added_source,
     }
     return item
+
+
+def set_watchlist_baseline(
+    symbol: str,
+    trade_date: Optional[str],
+    close: Optional[float],
+    adj: Optional[float],
+    source: Optional[str],
+) -> None:
+    """回填旧自选（本功能上线前加入）的添加时基准价。"""
+    with connection() as conn:
+        conn.execute(
+            "UPDATE watchlist SET added_trade_date=?, added_close=?, added_adj=?, "
+            "added_source=? WHERE symbol=? AND added_close IS NULL",
+            (trade_date, close, adj, source, symbol),
+        )
 
 
 def remove_watchlist(symbol: str) -> bool:

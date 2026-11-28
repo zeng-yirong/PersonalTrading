@@ -37,13 +37,15 @@ def seed_from_presets() -> int:
             if exists:
                 continue
             conn.execute(
-                "INSERT INTO strategies(id, name, query_json, params_json, source, status, "
-                "created_at, promoted_at, notes) VALUES(?, ?, ?, ?, 'preset', 'champion', ?, ?, ?)",
+                "INSERT INTO strategies(id, name, query_json, params_json, source, horizon, "
+                "status, created_at, promoted_at, notes) "
+                "VALUES(?, ?, ?, ?, 'preset', ?, 'champion', ?, ?, ?)",
                 (
                     preset.id,
                     preset.label,
                     json.dumps(preset.query, ensure_ascii=False),
-                    json.dumps({"rebalance": 20, "top_n": 10}),
+                    json.dumps({}),
+                    preset.horizon,
                     now_iso(),
                     now_iso(),
                     preset.text,
@@ -58,6 +60,7 @@ def _row_to_strategy(row: Any) -> dict[str, Any]:
         "id": row["id"],
         "name": row["name"],
         "query": json.loads(row["query_json"] or "{}"),
+        "horizon": row["horizon"] if "horizon" in row.keys() else "long",
         "params": json.loads(row["params_json"] or "{}"),
         "source": row["source"],
         "status": row["status"],

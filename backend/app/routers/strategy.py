@@ -32,11 +32,13 @@ async def list_all(
 ) -> dict[str, Any]:
     items = await run_in_threadpool(store.list_strategies, status)
     enriched = await run_in_threadpool(lambda: [store.with_metrics(item) for item in items])
-    # 同状态内按近一年超额排：库里最该先看到的是"最近跑得好的那条"。
+    # 同状态内先按周期分组（短线 → 中线 → 长线），再按近一年超额排。
     order = {"champion": 0, "watch": 1, "candidate": 2, "paused": 3, "retired": 4}
+    horizon_order = {"short": 0, "mid": 1, "long": 2}
     enriched.sort(
         key=lambda item: (
             order.get(item["status"], 9),
+            horizon_order.get(item.get("horizon") or "long", 2),
             -float((item.get("year1") or {}).get("excess_cagr_pct") or -999.0),
             item["name"],
         )

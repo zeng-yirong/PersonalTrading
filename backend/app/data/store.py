@@ -766,6 +766,36 @@ def _scale(value: Optional[float], ratio: float) -> Optional[float]:
     return round(value * ratio, 4)
 
 
+def get_recent_bars(
+    symbols: Sequence[str], limit: int = 8
+) -> dict[str, list[dict[str, Any]]]:
+    """最近 N 根日线（按标的升序排列），一次查询取多个自选，避免 N 次连接。"""
+    codes = [str(symbol) for symbol in dict.fromkeys(symbols) if symbol]
+    if not codes:
+        return {}
+    marks = ",".join("?" for _ in codes)
+    sql = (
+        "SELECT symbol, trade_date, close, pre_close, adj_factor FROM ("
+        "  SELECT symbol, trade_date, close, pre_close, adj_factor, "
+        "         row_number() OVER (PARTITION BY symbol ORDER BY trade_date DESC) AS rn "
+        f"  FROM daily WHERE symbol IN ({marks})"
+        ") WHERE rn <= ? ORDER BY symbol, trade_date"
+    )
+    with session(read_only=True) as conn:
+        rows = conn.execute(sql, [*codes, int(limit)]).fetchall()
+    output: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        output.setdefault(row[0], []).append(
+            {
+                "trade_date": row[1],
+                "close": row[2],
+                "pre_close": row[3],
+                "adj_factor": row[4],
+            }
+        )
+    return output
+
+
 def get_snapshot(
     trade_date: Optional[date] = None, asset_type: Optional[str] = None, limit: int = 10000
 ) -> list[dict[str, Any]]:

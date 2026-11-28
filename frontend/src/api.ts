@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   AgentRunSummary,
   BacktestMeta,
   BacktestRequest,
@@ -49,6 +49,7 @@
   UniverseAsset,
   UniverseResponse,
   WatchlistItem,
+  WatchlistMetric,
 } from './types'
 
 const BASE = '/api'
@@ -75,6 +76,7 @@ export const api = {
   meta: () => request<Meta>('/meta'),
 
   watchlist: () => request<WatchlistItem[]>('/watchlist'),
+  watchlistMetrics: () => request<WatchlistMetric[]>('/watchlist/metrics'),
   addWatchlist: (symbol: string, name?: string) =>
     request<WatchlistItem>('/watchlist', {
       method: 'POST',

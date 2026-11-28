@@ -88,3 +88,52 @@ def test_api_lists_and_rejects_illegal_status(app_db):
         assert getattr(exc, "status_code", None) == 400
     else:  # pragma: no cover
         raise AssertionError("非法状态应当被拒绝")
+
+# ------------------------------------------------------------------ horizon
+def test_horizon_params_and_gates():
+    from app.strategy import horizon
+
+    assert horizon.normalise("短线") == "short"
+    assert horizon.normalise("watch") == "long"          # 认不出就按长线处理
+
+    short = horizon.params_for("short")
+    long_ = horizon.params_for("long")
+    assert short["rebalance"] < long_["rebalance"]
+    assert short["top_n"] < long_["top_n"]
+
+    owned = horizon.params_for("short", {"rebalance": 2, "top_n": 3})
+    assert owned == {"rebalance": 2, "top_n": 3}
+
+
+def test_short_gate_rejects_a_losing_scalper():
+    from app.strategy import horizon
+
+    metrics = {
+        "trades": 765,
+        "hit_rate_pct": 42.5,
+        "win_loss_ratio": 0.9,
+        "fee_drag_pct": 8.2,
+        "max_drawdown_pct": -77.9,
+    }
+    gate = horizon.gate_check("short", metrics)
+    assert gate["passed"] is False
+    assert any("胜率" in item for item in gate["failures"])
+    assert any("盈亏比" in item for item in gate["failures"])
+
+
+def test_long_gate_passes_a_steady_strategy():
+    from app.strategy import horizon
+
+    metrics = {
+        "periods": 12,
+        "excess_cagr_pct": 16.8,
+        "max_drawdown_pct": -17.3,
+        "hit_rate_pct": 58.0,
+    }
+    assert horizon.gate_check("long", metrics)["passed"] is True
+
+
+def test_seed_keeps_horizon_from_presets(app_db):
+    by_id = {item["id"]: item for item in store.list_strategies("")}
+    assert by_id["limit-up-pullback"]["horizon"] == "short"
+    assert by_id["high-dividend"]["horizon"] == "long"

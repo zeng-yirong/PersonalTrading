@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api'
 import type { StrategyRow, StrategyStatus } from '../types'
@@ -15,6 +15,19 @@ const loading = ref(false)
 const error = ref('')
 const note = ref('')
 const busy = ref('')
+const group = ref<'all' | 'short' | 'mid' | 'long'>('all')
+
+const HORIZON_TEXT: Record<string, string> = { short: '短线', mid: '中线', long: '长线' }
+const HORIZON_TABS: Array<{ key: 'all' | 'short' | 'mid' | 'long'; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'short', label: '短线' },
+  { key: 'mid', label: '中线' },
+  { key: 'long', label: '长线' },
+]
+
+const visible = computed(() =>
+  group.value === 'all' ? rows.value : rows.value.filter((row) => (row.horizon || 'long') === group.value),
+)
 
 const STATUS_TEXT: Record<StrategyStatus, string> = {
   champion: '正式',
@@ -149,6 +162,22 @@ onMounted(load)
 
     <div v-if="error" class="error-bar" style="margin-top: 10px">{{ error }}</div>
 
+    <div class="strategy-tabs" style="margin-top: 10px">
+      <button
+        v-for="item in HORIZON_TABS"
+        :key="item.key"
+        type="button"
+        class="strategy-tab"
+        :class="{ active: group === item.key }"
+        @click="group = item.key"
+      >
+        {{ item.label }}
+      </button>
+      <span class="sub-meta" style="margin-left: 8px">
+        短线的参数是 3 日调仓 / 5 只，长线是 20 日 / 10 只——周期不同，门槛也不同
+      </span>
+    </div>
+
     <div class="screen-table-wrap" style="margin-top: 12px">
       <table class="screen-table">
         <thead>
@@ -163,7 +192,7 @@ onMounted(load)
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.id">
+          <tr v-for="row in visible" :key="row.id">
             <td>
               <div>{{ row.name }}</div>
               <div class="sub-meta mono" style="font-size: 11px">
@@ -174,6 +203,9 @@ onMounted(load)
               <span class="strategy-status" :class="`status-${row.status}`">
                 {{ STATUS_TEXT[row.status] }}
               </span>
+              <div>
+                <span class="strategy-horizon">{{ HORIZON_TEXT[row.horizon || 'long'] }}</span>
+              </div>
             </td>
             <td class="mono" :class="tone(row.year1?.excess_cagr_pct)">
               {{ fmt(row.year1?.excess_cagr_pct) }}

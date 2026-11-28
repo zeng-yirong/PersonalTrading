@@ -26,17 +26,23 @@ WINDOWS = {"1y": 365, "2y": 730}
 
 def _metrics_of(result: Optional[dict[str, Any]]) -> dict[str, Any]:
     metrics = (result or {}).get("metrics") or {}
-    return {
-        "periods": metrics.get("periods"),
-        "total_return_pct": metrics.get("total_return_pct"),
-        "cagr_pct": metrics.get("cagr_pct"),
-        "excess_cagr_pct": metrics.get(RANK_FIELD),
-        "max_drawdown_pct": metrics.get("max_drawdown_pct"),
-        "hit_rate_pct": metrics.get("hit_rate_pct"),
-        "exposure_pct": metrics.get("exposure_pct"),
-        "trades": metrics.get("trades"),
-        "empty_periods": metrics.get("empty_periods"),
-    }
+    keys = (
+        "periods",
+        "total_return_pct",
+        "cagr_pct",
+        RANK_FIELD,
+        "max_drawdown_pct",
+        "hit_rate_pct",
+        "exposure_pct",
+        "trades",
+        "empty_periods",
+        "avg_holding_days",
+        "turnover_pct",
+        "fee_drag_pct",
+        "win_loss_ratio",
+        "skipped_buys",
+    )
+    return {key: metrics.get(key) for key in keys}
 
 
 def _sort_key(row: dict[str, Any]) -> tuple:
@@ -56,20 +62,27 @@ def _panel_end() -> Optional[date]:
         return None
 
 
-def run_all(rebalance: int = 20, top_n: int = 10, persist: bool = True) -> dict[str, Any]:
-    """跑全部 champion（两个窗口），按近一年超额排序；写入 strategy_runs + 批次。"""
+def run_all(
+    rebalance: int = 20, top_n: int = 10, persist: bool = True
+) -> dict[str, Any]:
+    """跑全部 champion（两个窗口），**按 horizon 分组**用各自的参数与门槛。
+
+    ``rebalance`` / ``top_n`` 只在策略自己的 params 与分类默认值都缺时兜底。
+    """
     from app.backtest import service as backtest_service
+    from app.strategy import horizon as horizon_mod
 
     strategies = strategy_store.list_strategies("champion")
     rows: list[dict[str, Any]] = []
     end = _panel_end()
 
     for strategy in strategies:
-        params = strategy.get("params") or {}
+        horizon = horizon_mod.normalise(strategy.get("horizon") or "long")
+        params = horizon_mod.params_for(horizon, strategy.get("params") or {})
         base = {
             "query": strategy["query"],
-            "rebalance": int(params.get("rebalance") or rebalance),
-            "top_n": int(params.get("top_n") or top_n),
+            "rebalance": int(params["rebalance"]),
+            "top_n": int(params["top_n"]),
             "title": strategy["name"],
         }
         result: Optional[dict[str, Any]] = None
@@ -81,15 +94,19 @@ def run_all(rebalance: int = 20, top_n: int = 10, persist: bool = True) -> dict[
             error = f"{type(exc).__name__}: {exc}"
 
         metrics = _metrics_of(result)
+        gate = horizon_mod.gate_check(horizon, metrics)
         spec = (result or {}).get("spec") or {}
         row = {
             "id": strategy["id"],
             "label": strategy["name"],
+            "horizon": horizon,
+            "params": params,
             "status": "ok" if result else "failed",
             "error": error,
             "start": spec.get("start"),
             "end": spec.get("end"),
             **metrics,
+            "gate": gate,
         }
 
         long_metrics: dict[str, Any] = {}
@@ -106,9 +123,20 @@ def run_all(rebalance: int = 20, top_n: int = 10, persist: bool = True) -> dict[
         row["year2"] = long_metrics
         rows.append(row)
 
-    rows.sort(key=_sort_key)
-    for index, row in enumerate(rows, start=1):
-        row["rank"] = index
+    # 组内排名：先按 horizon 分组顺序，再按组内超额；rank 是组内名次。
+    order = {name: index for index, name in enumerate(("short", "mid", "long"))}
+    rows.sort(key=lambda row: (order.get(row.get("horizon"), 9), _sort_key(row)))
+    rank = 0
+    current = None
+    for row in rows:
+        if row.get("horizon") != current:      # 换组就重新从 1 开始
+            current = row.get("horizon")
+            rank = 0
+        if row["status"] != "ok":
+            row["rank"] = None
+            continue
+        rank += 1
+        row["rank"] = rank
 
     batch = {
         "created_at": now_iso(),
@@ -117,6 +145,7 @@ def run_all(rebalance: int = 20, top_n: int = 10, persist: bool = True) -> dict[
         "end": rows[0].get("end") if rows else None,
         "rebalance": rebalance,
         "top_n": top_n,
+        "grouped": True,
         "rows": rows,
     }
     if persist:
@@ -132,10 +161,15 @@ def _persist_runs(batch: dict[str, Any]) -> None:
         strategy_store.save_run(
             row["id"],
             "1y",
-            {key: row.get(key) for key in (
-                "periods", "total_return_pct", "cagr_pct", RANK_FIELD,
-                "max_drawdown_pct", "hit_rate_pct", "exposure_pct", "trades", "empty_periods",
-            )},
+            {
+                key: row.get(key)
+                for key in (
+                    "periods", "total_return_pct", "cagr_pct", RANK_FIELD,
+                    "max_drawdown_pct", "hit_rate_pct", "exposure_pct", "trades",
+                    "empty_periods", "avg_holding_days", "turnover_pct", "fee_drag_pct",
+                    "win_loss_ratio", "skipped_buys", "horizon", "params", "gate",
+                )
+            },
             batch_id=batch.get("id"),
             rank=row.get("rank"),
             start=row.get("start") or "",
@@ -197,13 +231,32 @@ def latest() -> Optional[dict[str, Any]]:
 
 
 def describe() -> dict[str, Any]:
-    """给选股页：champion 清单 + 最近一批排名。"""
+    """给选股页：champion 清单 + 最近一批排名（按周期分组排序）。"""
+    from app.strategy import horizon as horizon_mod
+
     champions = strategy_store.list_strategies("champion")
+    batch = latest()
+    rank_of = {
+        row["id"]: (row.get("rank"), row.get("horizon") or "long")
+        for row in (batch or {}).get("rows") or []
+    }
+    order = {name: index for index, name in enumerate(horizon_mod.HORIZONS)}
+    champions.sort(
+        key=lambda item: (
+            order.get(horizon_mod.normalise(item.get("horizon") or "long"), 9),
+            rank_of.get(item["id"], (99, ""))[0] or 99,
+        )
+    )
     return {
         "presets": [
-            {"id": item["id"], "label": item["name"], "text": item.get("notes") or ""}
+            {
+                "id": item["id"],
+                "label": item["name"],
+                "text": item.get("notes") or "",
+                "horizon": horizon_mod.normalise(item.get("horizon") or "long"),
+            }
             for item in champions
         ],
-        "batch": latest(),
+        "batch": batch,
         "rank_field": RANK_FIELD,
     }

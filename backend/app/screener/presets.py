@@ -1,4 +1,4 @@
-"""预设策略：``text`` 给人看，``query`` 给机器跑。
+﻿"""预设策略：``text`` 给人看，``query`` 给机器跑。
 
 12 个预设以前只活在前端（`ScreenPanel.vue` 的数组），后端拿不到——所以"每周把
 所有预设跑一遍回测"根本没有输入。现在它们落成数据文件：一次性把中文原话翻译成
@@ -31,9 +31,16 @@ class Preset:
     label: str
     text: str
     query: dict[str, Any]
+    horizon: str = "long"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "label": self.label, "text": self.text, "query": self.query}
+        return {
+            "id": self.id,
+            "label": self.label,
+            "text": self.text,
+            "query": self.query,
+            "horizon": self.horizon,
+        }
 
 
 def _load(path: Path = PRESETS_FILE) -> tuple[Preset, ...]:
@@ -66,7 +73,9 @@ def _load(path: Path = PRESETS_FILE) -> tuple[Preset, ...]:
         except screen_query.QueryError as exc:
             raise PresetError(f"预设 {identifier} 的条件不合法：{exc}") from exc
         seen.add(identifier)
-        presets.append(Preset(identifier, label, text, raw_query))
+        presets.append(
+            Preset(identifier, label, text, raw_query, str(entry.get("horizon") or "long"))
+        )
     return tuple(presets)
 
 

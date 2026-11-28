@@ -8,12 +8,30 @@
       "query": {
         "title": "低估值蓝筹",
         "filters": [
-          {"field": "pe_ttm", "op": "<=", "value": 15},
-          {"field": "roe", "op": ">=", "value": 15},
-          {"field": "total_mv", "op": ">=", "value": 50000000000}
+          {
+            "field": "pe_ttm",
+            "op": "<=",
+            "value": 15
+          },
+          {
+            "field": "roe",
+            "op": ">=",
+            "value": 15
+          },
+          {
+            "field": "total_mv",
+            "op": ">=",
+            "value": 50000000000
+          }
         ],
-        "sort": [{"field": "roe", "desc": true}]
-      }
+        "sort": [
+          {
+            "field": "roe",
+            "desc": true
+          }
+        ]
+      },
+      "horizon": "long"
     },
     {
       "id": "growth",
@@ -22,12 +40,30 @@
       "query": {
         "title": "高成长",
         "filters": [
-          {"field": "revenue_yoy", "op": ">=", "value": 25},
-          {"field": "profit_yoy", "op": ">=", "value": 25},
-          {"field": "pe_ttm", "op": "<=", "value": 60}
+          {
+            "field": "revenue_yoy",
+            "op": ">=",
+            "value": 25
+          },
+          {
+            "field": "profit_yoy",
+            "op": ">=",
+            "value": 25
+          },
+          {
+            "field": "pe_ttm",
+            "op": "<=",
+            "value": 60
+          }
         ],
-        "sort": [{"field": "profit_yoy", "desc": true}]
-      }
+        "sort": [
+          {
+            "field": "profit_yoy",
+            "desc": true
+          }
+        ]
+      },
+      "horizon": "mid"
     },
     {
       "id": "high-dividend",
@@ -36,12 +72,30 @@
       "query": {
         "title": "高股息防御",
         "filters": [
-          {"field": "dv_ttm", "op": ">=", "value": 4},
-          {"field": "pe_ttm", "op": "<=", "value": 20},
-          {"field": "debt_ratio", "op": "<=", "value": 60}
+          {
+            "field": "dv_ttm",
+            "op": ">=",
+            "value": 4
+          },
+          {
+            "field": "pe_ttm",
+            "op": "<=",
+            "value": 20
+          },
+          {
+            "field": "debt_ratio",
+            "op": "<=",
+            "value": 60
+          }
         ],
-        "sort": [{"field": "dv_ttm", "desc": true}]
-      }
+        "sort": [
+          {
+            "field": "dv_ttm",
+            "desc": true
+          }
+        ]
+      },
+      "horizon": "long"
     },
     {
       "id": "oversold",
@@ -50,12 +104,30 @@
       "query": {
         "title": "超跌反弹",
         "filters": [
-          {"field": "drawdown_52w", "op": "<=", "value": -40},
-          {"field": "roe", "op": ">=", "value": 8},
-          {"field": "turnover_rate", "op": ">=", "value": 2}
+          {
+            "field": "drawdown_52w",
+            "op": "<=",
+            "value": -40
+          },
+          {
+            "field": "roe",
+            "op": ">=",
+            "value": 8
+          },
+          {
+            "field": "turnover_rate",
+            "op": ">=",
+            "value": 2
+          }
         ],
-        "sort": [{"field": "drawdown_52w", "desc": false}]
-      }
+        "sort": [
+          {
+            "field": "drawdown_52w",
+            "desc": false
+          }
+        ]
+      },
+      "horizon": "short"
     },
     {
       "id": "price-volume",
@@ -64,12 +136,30 @@
       "query": {
         "title": "量价齐升",
         "filters": [
-          {"field": "volume_ratio", "op": ">=", "value": 1.5},
-          {"field": "ret20", "op": ">=", "value": 10},
-          {"field": "amount", "op": ">=", "value": 500000000}
+          {
+            "field": "volume_ratio",
+            "op": ">=",
+            "value": 1.5
+          },
+          {
+            "field": "ret20",
+            "op": ">=",
+            "value": 10
+          },
+          {
+            "field": "amount",
+            "op": ">=",
+            "value": 500000000
+          }
         ],
-        "sort": [{"field": "ret20", "desc": true}]
-      }
+        "sort": [
+          {
+            "field": "ret20",
+            "desc": true
+          }
+        ]
+      },
+      "horizon": "short"
     },
     {
       "id": "volume-breakout",
@@ -78,12 +168,30 @@
       "query": {
         "title": "放量突破",
         "filters": [
-          {"field": "ret5", "op": ">=", "value": 8},
-          {"field": "a_vstd_20", "op": ">=", "value": 0.3},
-          {"field": "amount", "op": ">=", "value": 300000000}
+          {
+            "field": "ret5",
+            "op": ">=",
+            "value": 8
+          },
+          {
+            "field": "a_vstd_20",
+            "op": ">=",
+            "value": 0.3
+          },
+          {
+            "field": "amount",
+            "op": ">=",
+            "value": 300000000
+          }
         ],
-        "sort": [{"field": "ret5", "desc": true}]
-      }
+        "sort": [
+          {
+            "field": "ret5",
+            "desc": true
+          }
+        ]
+      },
+      "horizon": "short"
     },
     {
       "id": "low-volatility",
@@ -92,12 +200,30 @@
       "query": {
         "title": "低波动",
         "filters": [
-          {"field": "a_vstd_20", "op": "<=", "value": 0.3},
-          {"field": "pe_ttm", "op": "<=", "value": 30},
-          {"field": "amount", "op": ">=", "value": 100000000}
+          {
+            "field": "a_vstd_20",
+            "op": "<=",
+            "value": 0.3
+          },
+          {
+            "field": "pe_ttm",
+            "op": "<=",
+            "value": 30
+          },
+          {
+            "field": "amount",
+            "op": ">=",
+            "value": 100000000
+          }
         ],
-        "sort": [{"field": "a_vstd_20", "desc": false}]
-      }
+        "sort": [
+          {
+            "field": "a_vstd_20",
+            "desc": false
+          }
+        ]
+      },
+      "horizon": "long"
     },
     {
       "id": "earnings-surprise",
@@ -106,12 +232,30 @@
       "query": {
         "title": "业绩预增",
         "filters": [
-          {"field": "profit_yoy", "op": ">=", "value": 50},
-          {"field": "revenue_yoy", "op": ">=", "value": 20},
-          {"field": "pe_ttm", "op": "<=", "value": 50}
+          {
+            "field": "profit_yoy",
+            "op": ">=",
+            "value": 50
+          },
+          {
+            "field": "revenue_yoy",
+            "op": ">=",
+            "value": 20
+          },
+          {
+            "field": "pe_ttm",
+            "op": "<=",
+            "value": 50
+          }
         ],
-        "sort": [{"field": "profit_yoy", "desc": true}]
-      }
+        "sort": [
+          {
+            "field": "profit_yoy",
+            "desc": true
+          }
+        ]
+      },
+      "horizon": "mid"
     },
     {
       "id": "below-book",
@@ -120,12 +264,30 @@
       "query": {
         "title": "破净修复",
         "filters": [
-          {"field": "pb", "op": "<=", "value": 1},
-          {"field": "roe", "op": ">=", "value": 5},
-          {"field": "debt_ratio", "op": "<=", "value": 70}
+          {
+            "field": "pb",
+            "op": "<=",
+            "value": 1
+          },
+          {
+            "field": "roe",
+            "op": ">=",
+            "value": 5
+          },
+          {
+            "field": "debt_ratio",
+            "op": "<=",
+            "value": 70
+          }
         ],
-        "sort": [{"field": "pb", "desc": false}]
-      }
+        "sort": [
+          {
+            "field": "pb",
+            "desc": false
+          }
+        ]
+      },
+      "horizon": "long"
     },
     {
       "id": "main-inflow",
@@ -134,12 +296,30 @@
       "query": {
         "title": "主力流入",
         "filters": [
-          {"field": "mf_net_20d", "op": ">=", "value": 30000},
-          {"field": "turnover_rate", "op": ">=", "value": 2},
-          {"field": "pe_ttm", "op": "<=", "value": 40}
+          {
+            "field": "mf_net_20d",
+            "op": ">=",
+            "value": 30000
+          },
+          {
+            "field": "turnover_rate",
+            "op": ">=",
+            "value": 2
+          },
+          {
+            "field": "pe_ttm",
+            "op": "<=",
+            "value": 40
+          }
         ],
-        "sort": [{"field": "mf_net_20d", "desc": true}]
-      }
+        "sort": [
+          {
+            "field": "mf_net_20d",
+            "desc": true
+          }
+        ]
+      },
+      "horizon": "mid"
     },
     {
       "id": "post-announcement",
@@ -148,12 +328,30 @@
       "query": {
         "title": "公告后强势",
         "filters": [
-          {"field": "fd_pead", "op": ">=", "value": 5},
-          {"field": "pe_ttm", "op": "<=", "value": 40},
-          {"field": "amount", "op": ">=", "value": 100000000}
+          {
+            "field": "fd_pead",
+            "op": ">=",
+            "value": 5
+          },
+          {
+            "field": "pe_ttm",
+            "op": "<=",
+            "value": 40
+          },
+          {
+            "field": "amount",
+            "op": ">=",
+            "value": 100000000
+          }
         ],
-        "sort": [{"field": "fd_pead", "desc": true}]
-      }
+        "sort": [
+          {
+            "field": "fd_pead",
+            "desc": true
+          }
+        ]
+      },
+      "horizon": "mid"
     },
     {
       "id": "limit-up-pullback",
@@ -162,12 +360,30 @@
       "query": {
         "title": "涨停回踩",
         "filters": [
-          {"field": "limit_up_5d", "op": ">=", "value": 1},
-          {"field": "turnover_rate", "op": ">=", "value": 5},
-          {"field": "pe_ttm", "op": "<=", "value": 60}
+          {
+            "field": "limit_up_5d",
+            "op": ">=",
+            "value": 1
+          },
+          {
+            "field": "turnover_rate",
+            "op": ">=",
+            "value": 5
+          },
+          {
+            "field": "pe_ttm",
+            "op": "<=",
+            "value": 60
+          }
         ],
-        "sort": [{"field": "limit_up_5d", "desc": true}]
-      }
+        "sort": [
+          {
+            "field": "limit_up_5d",
+            "desc": true
+          }
+        ]
+      },
+      "horizon": "short"
     }
   ]
 }

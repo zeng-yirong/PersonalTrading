@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.db import add_watchlist, list_watchlist, remove_watchlist
 from app.schemas import WatchlistAdd
+from app.services import watchlist as watchlist_service
 from app.services.symbols import asset_type, normalize_code, search_stocks
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
@@ -12,6 +13,12 @@ router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 @router.get("")
 async def get_watchlist() -> list[dict]:
     return list_watchlist()
+
+
+@router.get("/metrics")
+async def get_watchlist_metrics() -> list[dict]:
+    """现价 / 今日 / 近 5 日 / 添加自选后涨跌幅；行情取不到时退回面板。"""
+    return await watchlist_service.build_metrics()
 
 
 @router.post("")
@@ -29,7 +36,8 @@ async def create_watchlist_item(payload: WatchlistAdd) -> dict:
         except Exception:
             name = code
 
-    return add_watchlist(code, name, asset_type(code))
+    baseline = await watchlist_service.baseline_for(code)
+    return add_watchlist(code, name, asset_type(code), **baseline)
 
 
 @router.delete("/{symbol}")

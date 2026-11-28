@@ -296,7 +296,9 @@ def simulate(
         record["benchmark_return"] = _benchmark_return(bench, record["entry_date"], exit_day)
         record["excess"] = round(record["return"] - record["benchmark_return"], 6)
 
-    metrics = _metrics(nav_rows, periods, bench, trades, spec, days)
+    metrics = _metrics(
+        nav_rows, periods, bench, trades, spec, days, skipped_buys, blocked_sells
+    )
     if skipped_buys:
         warnings.append(f"{skipped_buys} 次买入因开盘涨停被跳过（无法成交）")
     if blocked_sells:
@@ -397,6 +399,8 @@ def _metrics(
     trades: list[dict[str, Any]],
     spec,
     days: list[date],
+    skipped_buys: int = 0,
+    blocked_sells: int = 0,
 ) -> dict[str, Any]:
     navs = [row["nav"] for row in nav_rows]
     total = navs[-1] / navs[0] - 1 if navs and navs[0] else 0.0
@@ -433,6 +437,38 @@ def _metrics(
     worst = min(periods, key=lambda item: item["excess"]) if periods else None
     empty = sum(1 for item in periods if not item["holdings"])
 
+    # 短周期策略要看的四个数：持有天数、年化换手、费用拖累、盈亏比。
+    day_index = {day.isoformat(): index for index, day in enumerate(days)}
+    holding: list[int] = []
+    for item in periods:
+        entry, exit_ = item.get("entry_date"), item.get("exit_date")
+        if entry in day_index and exit_ in day_index:
+            holding.append(max(1, day_index[exit_] - day_index[entry]))
+    avg_holding = statistics.fmean(holding) if holding else 0.0
+
+    notional = sum(
+        float(item["price"]) * float(item["shares"])
+        for item in trades
+        if item["side"] != "mark"
+    )
+    # 分母必须是"账户净资产"（元），不是 nav 比值（≈1.0）。
+    avg_equity = (
+        statistics.fmean(float(row.get("equity") or 0) for row in nav_rows)
+        if nav_rows
+        else float(spec.initial_cash)
+    )
+    years = max(1 / TRADING_DAYS, span / TRADING_DAYS)
+    turnover = (notional / 2 / avg_equity / years) if avg_equity else 0.0
+    fee_drag = (fees_total / avg_equity / years) if avg_equity else 0.0
+
+    wins = [value for value in returns if value > 0]
+    losses = [value for value in returns if value < 0]
+    win_loss = (
+        statistics.fmean(wins) / abs(statistics.fmean(losses))
+        if wins and losses and statistics.fmean(losses) != 0
+        else 0.0
+    )
+
     return {
         "start": days[0].isoformat(),
         "end": days[-1].isoformat(),
@@ -458,6 +494,12 @@ def _metrics(
         ) if periods else 0.0,
         "best_period": _period_brief(best),
         "worst_period": _period_brief(worst),
+        "avg_holding_days": round(avg_holding, 2),
+        "turnover_pct": round(turnover * 100, 2),
+        "fee_drag_pct": round(fee_drag * 100, 2),
+        "win_loss_ratio": round(win_loss, 3),
+        "skipped_buys": int(skipped_buys),
+        "blocked_sells": int(blocked_sells),
     }
 
 

@@ -79,10 +79,25 @@ def test_run_all_ranks_and_persists(app_db, monkeypatch):
 
     assert batch["id"]
     assert len(batch["rows"]) == 12
-    assert [row["rank"] for row in batch["rows"]] == list(range(1, 13))
-    assert batch["rows"][0]["label"] == "低波动"          # 超额最高
-    assert batch["rows"][-1]["status"] == "failed"        # 失败排最后
-    assert batch["rebalance"] == 20 and batch["top_n"] == 10
+    assert batch.get("grouped") is True
+
+    # 分组排名：rank 是组内名次，不跨组混排
+    groups: dict[str, list[dict]] = {}
+    for row in batch["rows"]:
+        groups.setdefault(row["horizon"], []).append(row)
+    assert set(groups) == {"short", "mid", "long"}
+    for rows in groups.values():
+        ranks = [row["rank"] for row in rows if row["rank"] is not None]
+        assert ranks == list(range(1, len(ranks) + 1))
+
+    # 短线用短线的参数（3 日调仓），长线用 20 日
+    assert groups["short"][0]["params"]["rebalance"] == 3
+    assert groups["long"][0]["params"]["rebalance"] == 20
+    # 失败的那条留在本组内并排最后
+    failed = [row for row in groups["short"] if row["status"] == "failed"]
+    assert failed and failed[0]["rank"] is None
+    # 每条都带门槛结果
+    assert all("gate" in row for row in batch["rows"])
 
     latest = ranking.latest()
     assert latest and latest["id"] == batch["id"]

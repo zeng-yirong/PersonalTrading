@@ -1,10 +1,25 @@
-﻿export type AssetType = 'stock' | 'etf'
+export type AssetType = 'stock' | 'etf'
 
 export interface WatchlistItem {
   symbol: string
   name: string
   asset_type: AssetType
   created_at?: string
+}
+
+/** 自选行指标：现价、今日、近 5 日、添加后（百分比，已 ×100）。 */
+export interface WatchlistMetric {
+  symbol: string
+  name: string
+  asset_type: AssetType
+  price: number | null
+  pct_chg: number | null
+  pct_5d: number | null
+  pct_since_add: number | null
+  added_trade_date: string | null
+  added_close: number | null
+  as_of: string | null
+  quote_source: string
 }
 
 /** 一个可点开的标的引用，用于详情、右键菜单与跨模块跳转。 */
@@ -444,6 +459,7 @@ export interface PresetItem {
   id: string
   label: string
   text: string
+  horizon?: StrategyHorizon
 }
 
 export interface PresetRankRow {
@@ -452,6 +468,8 @@ export interface PresetRankRow {
   text: string
   rank: number
   status: string
+  horizon?: StrategyHorizon
+  gate?: { passed: boolean; failures: string[] }
   error?: string
   start?: string | null
   end?: string | null
@@ -488,6 +506,8 @@ export interface StrategyMetrics {
 
 export type StrategyStatus = 'candidate' | 'watch' | 'champion' | 'retired' | 'paused'
 
+export type StrategyHorizon = 'short' | 'mid' | 'long'
+
 export interface StrategyRow {
   id: string
   name: string
@@ -500,6 +520,7 @@ export interface StrategyRow {
   retire_reason?: string | null
   query: ScreenQueryPayload
   params?: Record<string, number>
+  horizon?: StrategyHorizon
   year1?: StrategyMetrics | null
   year2?: StrategyMetrics | null
   trend?: number[]
