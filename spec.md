@@ -1,4 +1,4 @@
-﻿# 实现方案与验收标准
+# 实现方案与验收标准
 
 > 目标本身写在 [goat.md](goat.md)——本文件承载**功能设计、实现方案与验收**。
 > 编号与 goat.md 的「目标分层」一一对应（0.x / 1.x / 2.x / 3.x），第 4 节对应「质量属性」。
@@ -493,6 +493,7 @@
 | C 参数邻域 | 现有策略阈值 ×0.8/×1.2、调仓 3/5/10/20 扫描 | `strategy/generator.py` | 未实现 |
 | D 反向构造 | 回测最好/最差那一期的持仓画像 → 反推条件 | `strategy/generator.py` | 未实现 |
 | E 事件/主题驱动 | 主题报告的行业结论 → 行业约束 + 财务/动量条件 | `topic/` + `strategies` | 未实现 |
+| F AI 自构建 | 模型读策略库 / 记忆 / 技能 / 因子，自行提出假设并写出条件，统一回测 | `strategy/generator.py` 的 `--source ai` | 未实现（依赖 B/C/D 的素材） |
 
 #### A. 人工假设（成本最低，现在就能用）
 
@@ -571,6 +572,54 @@
 **共同的退出口**
 
 任何来源的候选，最终只由两件事决定生死：**分组门槛（§3.4）+ 观察期（§3.3）**。来源只影响"从哪来"，不影响"能不能留下"。
+
+#### F. AI 自构建
+
+模型读**已有策略 + 记忆 + 技能 + 因子库**，自行提出假设并写出可执行条件，再统一回测。
+
+**输入（全部本地、可复现）**
+
+| 输入 | 来源 | 作用 |
+|---|---|---|
+| 已有策略与成绩 | `strategies` / `strategy_runs` | 避免重复造已有的；知道哪些方向已经失败 |
+| 历史结论与错误 | `agents/memory.py`（`search` / `for_industry` / `recent`） | "这条以前试过、为什么不行" |
+| 技能 | `skills/strategy-review.md`、`screen-dsl.md` | 评审口径、字段与语法约束 |
+| 因子库 | `factor/promoted.py`（7 个）+ 双通过 12 个的 IC 与方向 | 提供候选信号 |
+| 字段目录 | `screener/fields.py`（53 字段 + 单位） | 防止编造字段、写错单位 |
+| 回测画像 | D 落库的最差/最好期持仓特征 | 让假设有数据依据 |
+
+**输出（严格 JSON，只允许这些键）**
+
+```json
+{"name": "...", "hypothesis": "...", "invalidation": "...",
+ "horizon": "short|mid|long",
+ "filters": [{"field": "pe_ttm", "op": "<=", "value": 20}],
+ "sort": [{"field": "roe", "desc": true}],
+ "inputs_used": {"strategies": ["..."], "memory": ["..."], "factors": ["..."]}}
+```
+
+模型只产出**假设与条件**，不产出结论、不接触回测分数。
+
+**硬约束（缺一不可）**
+
+- **一轮生成、统一回测**：不允许"看到分数再改条件"的多轮迭代——那是曲线拟合；
+- 每批 ≤10 条，`generated_count` 记入多重检验计数；
+- 条件必须过 `ScreenQuery.from_dict + where() + order_by()`；字段不在白名单、单位写错 → 丢弃并计入 `rejected`；
+- `invalidation` 为空 → 拒收（与 A 同一条规则）；
+- 条件 hash 与现有策略去重；后续进 champion 前还要过日收益相关 <0.8；
+- `provenance = {"origin": "ai_composed", "model": "...", "prompt_id": "strategy-compose@v0.1", "temperature": 0.2, "inputs_used": {...}}`；
+- 产出状态一律 `candidate`。
+
+**验收**
+
+- `python scripts/generate.py --source ai --n 10`：≤10 条候选入库并自动回测，每条都有非空 `invalidation` 与可追溯的 `inputs_used`；
+- 同一 prompt + 同一模型 + temperature 0.2 连跑两次，条件内容 hash 相同（允许措辞不同，不允许条件不同）；
+- 非法条件（假字段 / 单位错）100% 被拒，`rejected` 计数可查；
+- 0 次"看分数再改"：一次生成对应一次批量回测，脚本里没有回测分数回灌 prompt 的路径。
+
+**为什么排在 B/C/D 之后**
+
+现在 `champion = 0`、已判定复盘只有十几条、记忆条目有限。此时让模型"自由发挥"，它只能从字段目录里编出一个看起来合理的条件——质量约等于 B（因子组合）加上语言润色，**却多了一层不可复现的风险**。先让 B/C/D 攒出素材（尤其是"哪些方向已经失败"），F 才有真正的输入。
 
 ## 4. 质量属性
 
