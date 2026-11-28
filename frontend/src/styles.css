@@ -822,8 +822,12 @@ details.note summary {
 .screen-table th {
   position: sticky;
   top: 0;
-  background: rgba(127, 127, 127, 0.08);
+  /* 必须不透明：原来 rgba(127,127,127,0.08) 是半透明的，表格滚动时下面的行会透过
+     表头显出来，看起来像表头和数据重叠（2026-11-28 截图）。 */
+  background: var(--panel-2);
+  z-index: 2;
   font-weight: 600;
+  box-shadow: inset 0 -1px 0 var(--border);
 }
 
 .screen-table th:nth-child(1),

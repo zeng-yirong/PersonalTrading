@@ -181,7 +181,7 @@ onMounted(load)
         {{ item.label }}
       </button>
       <span class="sub-meta" style="margin-left: 8px">
-        短线的参数是 3 日调仓 / 5 只，长线是 20 日 / 10 只——周期不同，门槛也不同
+        短线：3 日调仓 / 5 只｜中线：10 日调仓 / 8 只｜长线：20 日调仓 / 10 只——周期不同，参数与门槛都不同
       </span>
     </div>
 
